@@ -1,11 +1,19 @@
+import { writeFile } from 'fs/promises'
+import { dialog } from 'electron'
 import * as chromeRequest from '../utils/chromeRequest'
 import { getAppConfig, getControledMihomoConfig } from '../config'
 import { getRuntimeConfigStr } from '../core/factory'
+import { encryptAgeContent, generateAgeKeyPair } from '../utils/age'
 
 interface GistInfo {
   id: string
   description: string
   html_url: string
+}
+
+interface GistAgeKeyPair {
+  secretKey: string
+  recipient: string
 }
 
 async function listGists(token: string): Promise<GistInfo[]> {
@@ -90,14 +98,39 @@ export async function getGistUrl(): Promise<string> {
 }
 
 export async function uploadRuntimeConfig(): Promise<void> {
-  const { githubToken } = await getAppConfig()
+  const { githubToken, gistAgeEncrypt = false, gistAgeRecipient } = await getAppConfig()
   if (!githubToken) return
   const gists = await listGists(githubToken)
   const gist = gists.find((gist) => gist.description === 'Auto Synced Clash Party Runtime Config')
-  const config = await getRuntimeConfigStr()
+  const runtimeConfig = await getRuntimeConfigStr()
+  const config = gistAgeEncrypt
+    ? await encryptAgeContent(runtimeConfig, gistAgeRecipient, 'gist runtime config')
+    : runtimeConfig
   if (gist) {
     await updateGist(githubToken, gist.id, config)
   } else {
     await createGist(githubToken, config)
   }
+}
+
+export async function generateGistAgeKeyPair(): Promise<GistAgeKeyPair> {
+  return await generateAgeKeyPair()
+}
+
+export async function exportGistAgeSecretKey(): Promise<boolean> {
+  const { gistAgeSecretKey } = await getAppConfig()
+  if (!gistAgeSecretKey) {
+    throw new Error('Gist Age private key has not been generated')
+  }
+
+  const { canceled, filePath } = await dialog.showSaveDialog({
+    title: 'Export Gist Age Private Key',
+    defaultPath: 'clash-party-gist-age-secret-key.txt',
+    filters: [{ name: 'Text File', extensions: ['txt'] }]
+  })
+
+  if (canceled || !filePath) return false
+
+  await writeFile(filePath, `${gistAgeSecretKey.trim()}\n`, 'utf-8')
+  return true
 }

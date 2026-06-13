@@ -308,6 +308,9 @@ interface IAppConfig {
   tunCardStatus?: CardStatus
   usageCardStatus?: CardStatus
   githubToken?: string
+  gistAgeEncrypt?: boolean
+  gistAgeRecipient?: string
+  gistAgeSecretKey?: string
   useSubStore: boolean
   subStoreHost?: string
   subStoreBackendSyncCron?: string
