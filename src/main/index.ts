@@ -39,26 +39,26 @@ import {
 import { configurePortableUserData } from './utils/dirs'
 
 function getWindowsPowerShellMajorVersion(): number | null {
-  const registryKeys = [
-    'HKLM\\SOFTWARE\\Microsoft\\PowerShell\\3\\PowerShellEngine',
-    'HKLM\\SOFTWARE\\Microsoft\\PowerShell\\1\\PowerShellEngine'
-  ]
-
-  for (const key of registryKeys) {
-    try {
-      const stdout = execFileSync('reg', ['query', key, '/v', 'PowerShellVersion'], {
-        encoding: 'utf8',
-        timeout: 800
-      })
-      const version = stdout.match(/PowerShellVersion\s+REG_\w+\s+([^\s]+)/)?.[1]
-      const major = version ? parseInt(version.split('.')[0], 10) : NaN
-      if (!isNaN(major)) return major
-    } catch {
-      // try next registry key
-    }
+  // 仅 PS 3.0+ 写入 \3\ 键（\1\ 键恒为 2.0，不可用）。
+  try {
+    const stdout = execFileSync(
+      'reg',
+      [
+        'query',
+        'HKLM\\SOFTWARE\\Microsoft\\PowerShell\\3\\PowerShellEngine',
+        '/v',
+        'PowerShellVersion'
+      ],
+      { encoding: 'utf8', timeout: 5000 }
+    )
+    const version = stdout.match(/PowerShellVersion\s+REG_\w+\s+([^\s]+)/)?.[1]
+    const major = version ? parseInt(version.split('.')[0], 10) : NaN
+    return isNaN(major) ? null : major
+  } catch (error) {
+    // 退出码 1 = 键不存在（Win7 仅 PS 2.0）；超时被杀或其他异常视为未知，不阻断。
+    const err = error as { killed?: boolean; status?: number | null }
+    return !err.killed && err.status === 1 ? 2 : null
   }
-
-  return null
 }
 
 // PowerShell 版本过低必须在 app 启动前提示并退出，因此保持同步执行
