@@ -23,7 +23,7 @@ async function createFloatingWindow(): Promise<void> {
       floatingWindowCompatMode || process.env.FLOATING_COMPAT_MODE === 'true' || safeMode
 
     const windowOptions: Electron.BrowserWindowConstructorOptions = {
-      width: 120,
+      width: 135,
       height: 42,
       x: floatingWindowState.x,
       y: floatingWindowState.y,
