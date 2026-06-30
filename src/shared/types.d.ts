@@ -259,7 +259,7 @@ interface INetworkLatencyTarget {
 }
 
 interface ICustomTrayIcons {
-  common?: string
+  off?: string
   sysProxy?: string
   tun?: string
 }

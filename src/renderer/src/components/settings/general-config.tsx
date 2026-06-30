@@ -49,7 +49,7 @@ import TrayIconCropModal from './tray-icon-crop-modal'
 const rasterTrayIconPattern = /\.(png|jpe?g|webp)$/i
 const macTrayIconPattern = /\.(ico|icns)$/i
 type TrayIconCropTarget = 'custom' | keyof ICustomTrayIcons
-const customTrayIconStateKeys: (keyof ICustomTrayIcons)[] = ['common', 'sysProxy', 'tun']
+const customTrayIconStateKeys: (keyof ICustomTrayIcons)[] = ['off', 'sysProxy', 'tun']
 
 const GeneralConfig: React.FC = () => {
   const { t, i18n } = useTranslation()

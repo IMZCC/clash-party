@@ -681,7 +681,7 @@ function getCustomTrayIconKey(status: TrayIconStatus): CustomTrayIconKey {
       return 'tun'
     case 'white':
     default:
-      return 'common'
+      return 'off'
   }
 }
 
@@ -695,7 +695,7 @@ function getCustomTrayIconForStatus(
   if (customTrayIcons[iconKey]) return customTrayIcons[iconKey]
 
   if (status === 'red') {
-    return customTrayIcons.tun || customTrayIcons.sysProxy || customTrayIcon
+    return customTrayIcons.sysProxy || customTrayIcon
   }
 
   return customTrayIcon
