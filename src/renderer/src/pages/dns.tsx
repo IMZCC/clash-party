@@ -1,50 +1,48 @@
 import { Button, Tab, Input, Switch, Tabs, Divider } from '@heroui/react'
 import BasePage from '@renderer/components/base/base-page'
+import { showErrorSync } from '@renderer/utils/error-display'
 import { MdDeleteForever } from 'react-icons/md'
 import SettingCard from '@renderer/components/base/base-setting-card'
 import SettingItem from '@renderer/components/base/base-setting-item'
 import { useControledMihomoConfig } from '@renderer/hooks/use-controled-mihomo-config'
 import { useAppConfig } from '@renderer/hooks/use-app-config'
-import { restartCore, patchMihomoConfig } from '@renderer/utils/ipc'
+import { mihomoHotReloadConfig } from '@renderer/utils/ipc'
 import React, { Key, ReactNode, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import {
+  DEFAULT_CONTROL_DNS,
+  DEFAULT_MIHOMO_DNS_CONFIG,
+  DEFAULT_USE_NAMESERVER_POLICY
+} from '../../../shared/appConfig'
 
 const DNS: React.FC = () => {
   const { t } = useTranslation()
   const { controledMihomoConfig, patchControledMihomoConfig } = useControledMihomoConfig()
   const { appConfig, patchAppConfig } = useAppConfig()
-  const { nameserverPolicy, useNameserverPolicy, controlDns = true } = appConfig || {}
+  const {
+    nameserverPolicy,
+    useNameserverPolicy = DEFAULT_USE_NAMESERVER_POLICY,
+    controlDns = DEFAULT_CONTROL_DNS
+  } = appConfig || {}
   const { dns, hosts } = controledMihomoConfig || {}
   const {
-    enable = true,
-    ipv6 = false,
-    'fake-ip-range': fakeIPRange = '198.18.0.1/16',
-    'fake-ip-filter': fakeIPFilter = [
-      '*',
-      '+.lan',
-      '+.local',
-      'time.*.com',
-      'ntp.*.com',
-      '+.market.xiaomi.com'
+    enable = DEFAULT_MIHOMO_DNS_CONFIG.enable,
+    ipv6 = DEFAULT_MIHOMO_DNS_CONFIG.ipv6,
+    'fake-ip-range': fakeIPRange = DEFAULT_MIHOMO_DNS_CONFIG['fake-ip-range'],
+    'fake-ip-filter': fakeIPFilter = DEFAULT_MIHOMO_DNS_CONFIG['fake-ip-filter'],
+    'fake-ip-filter-mode': fakeIPFilterMode = 'blacklist',
+    'enhanced-mode': enhancedMode = DEFAULT_MIHOMO_DNS_CONFIG['enhanced-mode'],
+    'use-hosts': useHosts = DEFAULT_MIHOMO_DNS_CONFIG['use-hosts'],
+    'use-system-hosts': useSystemHosts = DEFAULT_MIHOMO_DNS_CONFIG['use-system-hosts'],
+    'respect-rules': respectRules = DEFAULT_MIHOMO_DNS_CONFIG['respect-rules'],
+    'default-nameserver': defaultNameserver = DEFAULT_MIHOMO_DNS_CONFIG['default-nameserver'],
+    nameserver = DEFAULT_MIHOMO_DNS_CONFIG.nameserver,
+    'proxy-server-nameserver': proxyServerNameserver = DEFAULT_MIHOMO_DNS_CONFIG[
+      'proxy-server-nameserver'
     ],
-    'enhanced-mode': enhancedMode = 'fake-ip',
-    'use-hosts': useHosts = false,
-    'use-system-hosts': useSystemHosts = false,
-    'respect-rules': respectRules = false,
-    'default-nameserver': defaultNameserver = ['tls://223.5.5.5'],
-    nameserver = ['https://doh.pub/dns-query', 'https://dns.alidns.com/dns-query'],
-    'proxy-server-nameserver': proxyServerNameserver = [
-      'https://doh.pub/dns-query',
-      'https://dns.alidns.com/dns-query'
-    ],
-    'direct-nameserver': directNameserver = [],
-    fallback = [],
-    'fallback-filter': fallbackFilter = {
-      geoip: true,
-      'geoip-code': 'CN',
-      ipcidr: ['240.0.0.0/4', '0.0.0.0/32'],
-      domain: ['+.google.com', '+.facebook.com', '+.youtube.com']
-    }
+    'direct-nameserver': directNameserver = DEFAULT_MIHOMO_DNS_CONFIG['direct-nameserver'],
+    fallback = DEFAULT_MIHOMO_DNS_CONFIG.fallback,
+    'fallback-filter': fallbackFilter = DEFAULT_MIHOMO_DNS_CONFIG['fallback-filter']
   } = dns || {}
   const [changed, setChanged] = useState(false)
   const [values, originSetValues] = useState({
@@ -54,6 +52,7 @@ const DNS: React.FC = () => {
     enhancedMode,
     fakeIPRange,
     fakeIPFilter,
+    fakeIPFilterMode,
     useSystemHosts,
     respectRules,
     defaultNameserver,
@@ -61,10 +60,17 @@ const DNS: React.FC = () => {
     proxyServerNameserver,
     directNameserver,
     fallback,
-    fallbackGeoip: (fallbackFilter?.geoip || true) as string | true | string[],
-    fallbackGeoipCode: fallbackFilter?.['geoip-code'] || 'CN',
-    fallbackIpcidr: fallbackFilter?.ipcidr || ['240.0.0.0/4', '0.0.0.0/32'],
-    fallbackDomain: fallbackFilter?.domain || ['+.google.com', '+.facebook.com', '+.youtube.com'],
+    fallbackGeoip: (fallbackFilter?.geoip ||
+      DEFAULT_MIHOMO_DNS_CONFIG['fallback-filter']?.geoip ||
+      true) as string | true | string[],
+    fallbackGeoipCode:
+      fallbackFilter?.['geoip-code'] ||
+      DEFAULT_MIHOMO_DNS_CONFIG['fallback-filter']?.['geoip-code'] ||
+      'CN',
+    fallbackIpcidr:
+      fallbackFilter?.ipcidr || DEFAULT_MIHOMO_DNS_CONFIG['fallback-filter']?.ipcidr || [],
+    fallbackDomain:
+      fallbackFilter?.domain || DEFAULT_MIHOMO_DNS_CONFIG['fallback-filter']?.domain || [],
     useNameserverPolicy,
     nameserverPolicy: Object.entries(nameserverPolicy || {}).map(([domain, value]) => ({
       domain,
@@ -122,30 +128,49 @@ const DNS: React.FC = () => {
 
   const handleSubkeyChange = (type: string, domain: string, value: string, index: number): void => {
     const list = [...values[type]]
-    const processedValue = value.includes(',')
-      ? value.split(',').map((s: string) => s.trim())
-      : value.trim()
-    if (domain || processedValue) list[index] = { domain: domain.trim(), value: processedValue }
+    const parts = value
+      .split(',')
+      .map((s: string) => s.trim())
+      .filter(Boolean)
+    const processedValue = type === 'hosts' ? parts : parts.length > 1 ? parts : value.trim()
+    if (domain || parts.length > 0) list[index] = { domain: domain.trim(), value: processedValue }
     else list.splice(index, 1)
     setValues({ ...values, [type]: list })
   }
 
+  const getNameserverPolicy = (): IAppConfig['nameserverPolicy'] => {
+    if (!values.useNameserverPolicy) return {}
+
+    return Object.fromEntries(
+      values.nameserverPolicy.flatMap(({ domain, value }) => {
+        const key = domain.trim()
+        const nextValue = Array.isArray(value)
+          ? value.map((item) => item.trim()).filter(Boolean)
+          : value.trim()
+
+        if (!key || (Array.isArray(nextValue) ? nextValue.length === 0 : !nextValue)) return []
+        return [[key, nextValue]]
+      })
+    )
+  }
+
   const onSave = async (patch: Partial<IMihomoConfig>): Promise<void> => {
+    const nextNameserverPolicy = getNameserverPolicy()
     await patchAppConfig({
-      nameserverPolicy: Object.fromEntries(
-        values.nameserverPolicy.map(({ domain, value }) => [domain, value])
-      ),
+      nameserverPolicy: nextNameserverPolicy,
       useNameserverPolicy: values.useNameserverPolicy
     })
     try {
       setChanged(false)
-      await patchControledMihomoConfig(patch)
+      await patchControledMihomoConfig({
+        ...patch,
+        dns: patch.dns ? { ...patch.dns, 'nameserver-policy': nextNameserverPolicy } : patch.dns
+      })
       if (controlDns) {
-        await patchMihomoConfig(patch)
-        await restartCore()
+        await mihomoHotReloadConfig()
       }
     } catch (e) {
-      alert(e)
+      showErrorSync(e, t('common.error.dnsConfigSaveFailed'))
     }
   }
 
@@ -164,6 +189,7 @@ const DNS: React.FC = () => {
                 ipv6: values.ipv6,
                 'fake-ip-range': values.fakeIPRange,
                 'fake-ip-filter': values.fakeIPFilter,
+                'fake-ip-filter-mode': values.fakeIPFilterMode,
                 'enhanced-mode': values.enhancedMode,
                 'use-hosts': values.useHosts,
                 'use-system-hosts': values.useSystemHosts,
@@ -213,6 +239,7 @@ const DNS: React.FC = () => {
           <Tabs
             size="sm"
             color="primary"
+            classNames={{ tab: 'w-[4.5rem]' }}
             selectedKey={values.enhancedMode}
             onSelectionChange={(key: Key) => setValues({ ...values, enhancedMode: key as DnsMode })}
           >
@@ -234,9 +261,29 @@ const DNS: React.FC = () => {
                 }}
               />
             </SettingItem>
+            <SettingItem title={t('dns.fakeIp.filterMode')} divider>
+              <Tabs
+                size="sm"
+                color="primary"
+                classNames={{ tab: 'w-[3.5rem]' }}
+                selectedKey={values.fakeIPFilterMode}
+                onSelectionChange={(key: Key) =>
+                  setValues({ ...values, fakeIPFilterMode: key as FilterMode })
+                }
+              >
+                <Tab key="blacklist" title={t('dns.fakeIp.filterMode.blacklist')} />
+                <Tab key="whitelist" title={t('dns.fakeIp.filterMode.whitelist')} />
+                <Tab key="rule" title={t('dns.fakeIp.filterMode.rule')} />
+              </Tabs>
+            </SettingItem>
             <div className="flex flex-col items-stretch">
               <h3>{t('dns.fakeIp.filter')}</h3>
-              {renderListInputs('fakeIPFilter', t('dns.fakeIp.filterPlaceholder'))}
+              {renderListInputs(
+                'fakeIPFilter',
+                values.fakeIPFilterMode === 'rule'
+                  ? t('dns.fakeIp.filterPlaceholder.rule')
+                  : t('dns.fakeIp.filterPlaceholder')
+              )}
             </div>
             <Divider className="my-2" />
           </>
@@ -424,7 +471,7 @@ const DNS: React.FC = () => {
         <SettingItem title={t('dns.fallbackFilter.geoipCode')} divider>
           <Input
             size="sm"
-            className="w-[100px]"
+            className="w-25"
             value={typeof values.fallbackGeoipCode === 'string' ? values.fallbackGeoipCode : ''}
             placeholder="CN"
             onValueChange={(v) => {

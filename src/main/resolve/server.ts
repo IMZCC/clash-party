@@ -1,17 +1,19 @@
-import { getAppConfig, getControledMihomoConfig } from '../config'
 import { Worker } from 'worker_threads'
-import { dataDir, mihomoWorkDir, subStoreDir, substoreLogPath } from '../utils/dirs'
-import subStoreIcon from '../../../resources/subStoreIcon.png?asset'
-import { createWriteStream, existsSync, mkdirSync } from 'fs'
+import { existsSync, mkdirSync } from 'fs'
 import { writeFile, rm, cp } from 'fs/promises'
 import http from 'http'
 import net from 'net'
 import path from 'path'
 import { nativeImage } from 'electron'
 import express from 'express'
-import axios from 'axios'
 import AdmZip from 'adm-zip'
+import * as chromeRequest from '../utils/chromeRequest'
+import subStoreIcon from '../../../resources/subStoreIcon.png?asset'
+import { dataDir, mihomoWorkDir, subStoreDir, substoreLogPath } from '../utils/dirs'
+import { getAppConfig, getControledMihomoConfig } from '../config'
 import { systemLogger } from '../utils/logger'
+import { createCappedLogWritableStream } from '../utils/logFile'
+import { DEFAULT_MIHOMO_PORTS, DEFAULT_USE_SUB_STORE } from '../../shared/appConfig'
 
 export let pacPort: number
 export let subStorePort: number
@@ -55,7 +57,7 @@ export async function startPacServer(): Promise<void> {
   }
   const host = cHost || '127.0.0.1'
   let script = pacScript || defaultPacScript
-  const { 'mixed-port': port = 7890 } = await getControledMihomoConfig()
+  const { 'mixed-port': port = DEFAULT_MIHOMO_PORTS.mixed } = await getControledMihomoConfig()
   script = script.replaceAll('%mixed-port%', port.toString())
   pacPort = await findAvailablePort(10000)
   pacServer = http
@@ -73,12 +75,16 @@ export async function stopPacServer(): Promise<void> {
 }
 
 export async function startSubStoreFrontendServer(): Promise<void> {
-  const { useSubStore = true, subStoreHost = '127.0.0.1' } = await getAppConfig()
+  const { useSubStore = DEFAULT_USE_SUB_STORE, subStoreHost = '127.0.0.1' } = await getAppConfig()
   if (!useSubStore) return
   await stopSubStoreFrontendServer()
   subStoreFrontendPort = await findAvailablePort(14122)
   const app = express()
-  app.use(express.static(path.join(mihomoWorkDir(), 'sub-store-frontend')))
+  const frontendDir = path.join(mihomoWorkDir(), 'sub-store-frontend')
+  app.use(express.static(frontendDir))
+  app.use((_req, res) => {
+    res.sendFile(path.join(frontendDir, 'index.html'))
+  })
   subStoreFrontendServer = app.listen(subStoreFrontendPort, subStoreHost)
 }
 
@@ -90,7 +96,7 @@ export async function stopSubStoreFrontendServer(): Promise<void> {
 
 export async function startSubStoreBackendServer(): Promise<void> {
   const {
-    useSubStore = true,
+    useSubStore = DEFAULT_USE_SUB_STORE,
     useCustomSubStore = false,
     useProxyInSubStore = false,
     subStoreHost = '127.0.0.1',
@@ -98,15 +104,15 @@ export async function startSubStoreBackendServer(): Promise<void> {
     subStoreBackendDownloadCron = '',
     subStoreBackendUploadCron = ''
   } = await getAppConfig()
-  const { 'mixed-port': port = 7890 } = await getControledMihomoConfig()
+  const { 'mixed-port': port = DEFAULT_MIHOMO_PORTS.mixed } = await getControledMihomoConfig()
   if (!useSubStore) return
   if (!useCustomSubStore) {
     await stopSubStoreBackendServer()
     subStorePort = await findAvailablePort(38324)
     const icon = nativeImage.createFromPath(subStoreIcon)
     icon.toDataURL()
-    const stdout = createWriteStream(substoreLogPath(), { flags: 'a' })
-    const stderr = createWriteStream(substoreLogPath(), { flags: 'a' })
+    const stdout = createCappedLogWritableStream(substoreLogPath)
+    const stderr = createCappedLogWritableStream(substoreLogPath)
     const env = {
       SUB_STORE_BACKEND_API_PORT: subStorePort.toString(),
       SUB_STORE_BACKEND_API_HOST: subStoreHost,
@@ -141,7 +147,7 @@ export async function stopSubStoreBackendServer(): Promise<void> {
 }
 
 export async function downloadSubStore(): Promise<void> {
-  const { 'mixed-port': mixedPort = 7890 } = await getControledMihomoConfig()
+  const { 'mixed-port': mixedPort = DEFAULT_MIHOMO_PORTS.mixed } = await getControledMihomoConfig()
   const frontendDir = path.join(mihomoWorkDir(), 'sub-store-frontend')
   const backendPath = path.join(mihomoWorkDir(), 'sub-store.bundle.cjs')
   const tempDir = path.join(dataDir(), 'temp')
@@ -155,7 +161,7 @@ export async function downloadSubStore(): Promise<void> {
 
     // 下载后端文件
     const tempBackendPath = path.join(tempDir, 'sub-store.bundle.cjs')
-    const backendRes = await axios.get(
+    const backendRes = await chromeRequest.get(
       'https://github.com/sub-store-org/Sub-Store/releases/latest/download/sub-store.bundle.js',
       {
         responseType: 'arraybuffer',
@@ -167,9 +173,9 @@ export async function downloadSubStore(): Promise<void> {
         }
       }
     )
-    await writeFile(tempBackendPath, Buffer.from(backendRes.data))
+    await writeFile(tempBackendPath, Buffer.from(backendRes.data as Buffer))
     // 下载前端文件
-    const frontendRes = await axios.get(
+    const frontendRes = await chromeRequest.get(
       'https://github.com/sub-store-org/Sub-Store-Front-End/releases/latest/download/dist.zip',
       {
         responseType: 'arraybuffer',
@@ -182,7 +188,7 @@ export async function downloadSubStore(): Promise<void> {
       }
     )
     // 先解压到临时目录
-    const zip = new AdmZip(Buffer.from(frontendRes.data))
+    const zip = new AdmZip(Buffer.from(frontendRes.data as Buffer))
     zip.extractAllTo(tempDir, true)
     await cp(tempBackendPath, backendPath)
     if (existsSync(frontendDir)) {

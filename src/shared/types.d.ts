@@ -2,8 +2,25 @@ type OutboundMode = 'rule' | 'global' | 'direct'
 type LogLevel = 'info' | 'debug' | 'warning' | 'error' | 'silent'
 type SysProxyMode = 'auto' | 'manual'
 type CardStatus = 'col-span-2' | 'col-span-1' | 'hidden'
+type SiderCardKey =
+  | 'sysproxy'
+  | 'tun'
+  | 'profile'
+  | 'proxy'
+  | 'rule'
+  | 'resource'
+  | 'override'
+  | 'connection'
+  | 'mihomo'
+  | 'dns'
+  | 'sniff'
+  | 'log'
+  | 'substore'
+  | 'network'
+  | 'usage'
+type NetworkInfoCardKey = 'ip' | 'topology' | 'latency'
 type AppTheme = 'system' | 'light' | 'dark'
-type MihomoGroupType = 'Selector' | 'URLTest' | 'LoadBalance' | 'Relay'
+type MihomoGroupType = 'Selector' | 'URLTest' | 'Fallback' | 'LoadBalance' | 'Relay'
 type Priority =
   | 'PRIORITY_LOW'
   | 'PRIORITY_BELOW_NORMAL'
@@ -31,10 +48,15 @@ type MihomoProxyType =
   | 'Hysteria2'
   | 'Tuic'
   | 'WireGuard'
+  | 'Mieru'
+  | 'AnyTLS'
+  | 'Sudoku'
+  | 'Masque'
+  | 'TrustTunnel'
 type TunStack = 'gvisor' | 'mixed' | 'system'
 type FindProcessMode = 'off' | 'strict' | 'always'
-type DnsMode = 'normal' | 'fake-ip' | 'redir-host'
-type FilterMode = 'blacklist' | 'whitelist'
+type DnsMode = 'normal' | 'fake-ip' | 'redir-host' | 'hosts'
+type FilterMode = 'blacklist' | 'whitelist' | 'rule'
 type NetworkInterfaceInfo = os.NetworkInterfaceInfo
 
 interface IAppVersion {
@@ -72,6 +94,14 @@ interface IMihomoRulesDetail {
   payload: string
   proxy: string
   size: number
+  index: number
+  extra?: {
+    disabled: boolean
+    hitCount: number
+    hitAt: string
+    missCount: number
+    missAt: string
+  }
 }
 
 interface IMihomoConnectionsInfo {
@@ -116,6 +146,7 @@ interface IMihomoConnectionDetail {
   download: number
   start: string
   chains: string[]
+  providerChains: string[]
   rule: string
   rulePayload: string
 }
@@ -141,9 +172,14 @@ interface IMihomoProxy {
   tfo: boolean
   type: MihomoProxyType
   udp: boolean
+  uot: boolean
   xudp: boolean
   mptcp: boolean
   smux: boolean
+  interface?: string
+  'routing-mark'?: number
+  'provider-name'?: string
+  'dialer-proxy'?: string
 }
 
 interface IMihomoGroup {
@@ -151,6 +187,7 @@ interface IMihomoGroup {
   all: string[]
   extra: Record<string, { alive: boolean; history: IMihomoHistory[] }>
   testUrl?: string
+  expectedStatus?: string
   fixed?: string
   hidden: boolean
   history: IMihomoHistory[]
@@ -183,6 +220,7 @@ interface IMihomoRuleProvider {
   type: string
   updatedAt: string
   vehicleType: string
+  payload?: string[]
 }
 
 interface IMihomoProxyProviders {
@@ -215,6 +253,17 @@ interface ISysProxyConfig {
   pacScript?: string
 }
 
+interface INetworkLatencyTarget {
+  name: string
+  url: string
+}
+
+interface ICustomTrayIcons {
+  off?: string
+  sysProxy?: string
+  tun?: string
+}
+
 interface IAppConfig {
   core: 'mihomo' | 'mihomo-alpha' | 'mihomo-smart' | 'mihomo-specific'
   specificVersion?: string
@@ -223,11 +272,13 @@ interface IAppConfig {
   smartCoreUseLightGBM: boolean
   smartCoreCollectData: boolean
   smartCoreStrategy: 'sticky-sessions' | 'round-robin'
+  smartCollectorSize?: number
   proxyDisplayMode: 'simple' | 'full'
   proxyDisplayOrder: 'default' | 'delay' | 'name'
   profileDisplayDate?: 'expire' | 'update'
-  envType?: ('bash' | 'cmd' | 'powershell')[]
+  envType?: ('bash' | 'cmd' | 'powershell' | 'fish' | 'nushell')[]
   proxyCols: 'auto' | '1' | '2' | '3' | '4'
+  hideUnavailableProxies?: boolean
   connectionDirection: 'asc' | 'desc'
   connectionOrderBy: 'time' | 'upload' | 'download' | 'uploadSpeed' | 'downloadSpeed'
   connectionViewMode?: 'list' | 'table'
@@ -235,8 +286,11 @@ interface IAppConfig {
   connectionTableColumnWidths?: Record<string, number>
   connectionTableSortColumn?: string
   connectionTableSortDirection?: 'asc' | 'desc'
+  displayIcon?: boolean
+  displayAppName?: boolean
   spinFloatingIcon?: boolean
   disableTray?: boolean
+  swapTrayClick?: boolean
   showFloatingWindow?: boolean
   floatingWindowCompatMode?: boolean
   disableHardwareAcceleration?: boolean
@@ -245,17 +299,24 @@ interface IAppConfig {
   logCardStatus?: CardStatus
   hideConnectionCardWave?: boolean
   pauseSSID?: string[]
+  disableDnsOnPauseSSID?: boolean
+  controlDnsBeforePause?: boolean
   mihomoCoreCardStatus?: CardStatus
   overrideCardStatus?: CardStatus
   profileCardStatus?: CardStatus
   proxyCardStatus?: CardStatus
+  networkCardStatus?: CardStatus
   resourceCardStatus?: CardStatus
   ruleCardStatus?: CardStatus
   sniffCardStatus?: CardStatus
   substoreCardStatus?: CardStatus
   sysproxyCardStatus?: CardStatus
   tunCardStatus?: CardStatus
+  usageCardStatus?: CardStatus
   githubToken?: string
+  gistAgeEncrypt?: boolean
+  gistAgeRecipient?: string
+  gistAgeSecretKey?: string
   useSubStore: boolean
   subStoreHost?: string
   subStoreBackendSyncCron?: string
@@ -263,8 +324,10 @@ interface IAppConfig {
   subStoreBackendUploadCron?: string
   autoQuitWithoutCore?: boolean
   autoQuitWithoutCoreDelay?: number
+  autoQuitWithoutCoreMode?: 'core' | 'tray'
   useCustomSubStore?: boolean
   useProxyInSubStore?: boolean
+  pluginUseProxy?: boolean // 插件网关请求经由本地混合端口代理（安全保证降级，默认关闭）
   mihomoCpuPriority?: Priority
   customSubStoreUrl?: string
   diffWorkDir?: boolean
@@ -272,19 +335,30 @@ interface IAppConfig {
   originDNS?: string
   useWindowFrame: boolean
   proxyInTray: boolean
+  showCurrentProxyInTray: boolean
+  enableTrafficLogger?: boolean
   siderOrder: string[]
+  lastSelectedSiderCard?: SiderCardKey
+  rememberSelectedSiderCard?: boolean
+  lockSiderCards?: boolean
   siderWidth: number
   appTheme: AppTheme
   customTheme?: string
   autoCheckUpdate: boolean
+  githubProxy?: string
   silentStart: boolean
   autoCloseConnection: boolean
   sysProxy: ISysProxyConfig
   maxLogDays: number
+  maxLogFileSize: number
+  disableAppLog?: boolean
   userAgent?: string
   delayTestConcurrency?: number
   delayTestUrl?: string
   delayTestTimeout?: number
+  networkLatencyTargets?: INetworkLatencyTarget[]
+  networkIPProvider?: 'ip.sb' | 'ipwho.is' | 'ipapi.is'
+  networkInfoCardOrder?: NetworkInfoCardKey[]
   subscriptionTimeout?: number
   encryptedPassword?: number[]
   controlDns?: boolean
@@ -292,6 +366,9 @@ interface IAppConfig {
   useDockIcon?: boolean
   showTraffic?: boolean
   disableTrayIconColor?: boolean
+  customTrayIcon?: string
+  customTrayIcons?: ICustomTrayIcons
+  trayProxyGroupStyle?: 'default' | 'submenu'
   disableAnimations?: boolean
   webdavUrl?: string
   webdavDir?: string
@@ -299,6 +376,7 @@ interface IAppConfig {
   webdavPassword?: string
   webdavMaxBackups?: number
   webdavBackupCron?: string
+  webdavIgnoreCert?: boolean
   useNameserverPolicy: boolean
   nameserverPolicy: { [key: string]: string | string[] }
   showWindowShortcut?: string
@@ -310,8 +388,22 @@ interface IAppConfig {
   directModeShortcut?: string
   restartAppShortcut?: string
   quitWithoutCoreShortcut?: string
-  language?: 'zh-CN' | 'en-US' | 'ru-RU' | 'fa-IR'
+  copyEnvShortcut?: string
+  language?: 'zh-CN' | 'zh-TW' | 'en-US' | 'ru-RU' | 'fa-IR'
   triggerMainWindowBehavior?: 'show' | 'toggle'
+  showMixedPort?: number
+  enableMixedPort?: boolean
+  showSocksPort?: number
+  enableSocksPort?: boolean
+  showHttpPort?: number
+  enableHttpPort?: boolean
+  showRedirPort?: number
+  enableRedirPort?: boolean
+  showTproxyPort?: number
+  enableTproxyPort?: boolean
+  testProfileOnStart?: boolean
+  useHotReloadProfile?: boolean
+  hotReloadProfileAutoCloseConnection?: boolean
 }
 
 interface IMihomoTunConfig {
@@ -466,7 +558,7 @@ interface ISubscriptionUserInfo {
 
 interface IProfileItem {
   id: string
-  type: 'remote' | 'local'
+  type: 'remote' | 'local' | 'plugin'
   name: string
   url?: string // remote
   file?: string // local
@@ -478,6 +570,12 @@ interface IProfileItem {
   extra?: ISubscriptionUserInfo
   substore?: boolean
   allowFixedInterval?: boolean
+  autoUpdate?: boolean
+  authToken?: string
+  userAgent?: string
+  ageSecretKey?: string
+  updateTimeout?: number
+  pluginId?: string
 }
 
 interface ISubStoreSub {
@@ -485,4 +583,77 @@ interface ISubStoreSub {
   displayName?: string
   icon?: string
   tag?: string[]
+}
+
+interface IPluginProvider {
+  name: string
+  icon?: string
+  site?: string
+}
+
+// .cpx v2 — public, unencrypted descriptor. Contains NO secrets.
+interface IPluginDescriptor {
+  magic: 'CPXF'
+  v: 2
+  spec: 'cpx-plugin/2'
+  loginUrl: string // OAuth authorize endpoint, https, no query/fragment
+  provider: IPluginProvider
+}
+
+// Subset returned by previewPlugin for the install-confirm page (no records, no network)
+interface IPluginDescriptorPreview {
+  name: string
+  icon?: string
+  site?: string
+  loginUrl: string // full url; UI shows the host
+  spec: string
+}
+
+interface IGatewayEndpoints {
+  enroll: string
+  challenge: string
+  config: string
+  revoke: string
+}
+
+// /.well-known/cpx-gateway discovery response
+interface IGatewayWellKnown {
+  spec: 'cpx-plugin/2'
+  gateway: string // https origin, no path/query/fragment
+  endpoints: IGatewayEndpoints
+}
+
+type IPluginStatus = 'needs-login' | 'active' | 'needs-reauth'
+
+interface IPluginItem {
+  id: string
+  name: string
+  icon?: string
+  site?: string
+  loginUrl: string // public metadata; required to re-open the browser after restart
+  spec: string
+  profileId?: string // absent while 'needs-login'; present once 'active'/'needs-reauth'
+  status: IPluginStatus
+  interval?: number
+  autoUpdate?: boolean
+  created: number
+  updated: number
+  lastUpdateErrorType?: 'auth' | 'transient'
+  lastUpdateErrorAt?: number
+  nextRetryAt?: number
+  failureCount?: number
+}
+
+interface IPluginConfig {
+  items: IPluginItem[]
+}
+
+// safeStorage-encrypted vault payload — the ONLY place secrets live.
+interface IPluginVault {
+  devicePrivKey: string // Ed25519 raw 32-byte seed, base64 (standard, padded)
+  deviceId: string // UUIDv4
+  gateway: {
+    gateway: string // discovered https origin (cached for silent updates)
+    endpoints: IGatewayEndpoints
+  }
 }

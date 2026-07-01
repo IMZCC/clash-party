@@ -5,6 +5,7 @@ import { ThemeProvider as NextThemesProvider } from 'next-themes'
 import { HeroUIProvider } from '@heroui/react'
 import { init, platform } from '@renderer/utils/init'
 import '@renderer/assets/main.css'
+import 'flag-icons/css/flag-icons.min.css'
 import App from '@renderer/App'
 import BaseErrorBoundary from './components/base/base-error-boundary'
 import { openDevTools, quitApp } from './utils/ipc'
@@ -12,8 +13,10 @@ import { AppConfigProvider } from './hooks/use-app-config'
 import { ControledMihomoConfigProvider } from './hooks/use-controled-mihomo-config'
 import { OverrideConfigProvider } from './hooks/use-override-config'
 import { ProfileConfigProvider } from './hooks/use-profile-config'
+import { PluginConfigProvider } from './hooks/use-plugin-config'
 import { RulesProvider } from './hooks/use-rules'
 import { GroupsProvider } from './hooks/use-groups'
+import { ToastProvider } from './components/base/toast'
 import './i18n'
 
 let F12Count = 0
@@ -50,13 +53,17 @@ init().then(() => {
               <AppConfigProvider>
                 <ControledMihomoConfigProvider>
                   <ProfileConfigProvider>
-                    <OverrideConfigProvider>
-                      <GroupsProvider>
-                        <RulesProvider>
-                          <App />
-                        </RulesProvider>
-                      </GroupsProvider>
-                    </OverrideConfigProvider>
+                    <PluginConfigProvider>
+                      <OverrideConfigProvider>
+                        <GroupsProvider>
+                          <RulesProvider>
+                            <ToastProvider>
+                              <App />
+                            </ToastProvider>
+                          </RulesProvider>
+                        </GroupsProvider>
+                      </OverrideConfigProvider>
+                    </PluginConfigProvider>
                   </ProfileConfigProvider>
                 </ControledMihomoConfigProvider>
               </AppConfigProvider>

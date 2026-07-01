@@ -8,32 +8,47 @@ import {
   Button,
   Input,
   Switch,
+  Select,
+  SelectItem,
   Dropdown,
   DropdownTrigger,
   DropdownMenu,
   DropdownItem
 } from '@heroui/react'
+import { toast } from '@renderer/components/base/toast'
 import React, { useState } from 'react'
-import SettingItem from '../base/base-setting-item'
 import { useOverrideConfig } from '@renderer/hooks/use-override-config'
-import { restartCore, addProfileUpdater } from '@renderer/utils/ipc'
+import {
+  mihomoHotReloadConfig,
+  addProfileUpdater,
+  getFilePath,
+  readTextFile
+} from '@renderer/utils/ipc'
 import { MdDeleteForever } from 'react-icons/md'
 import { FaPlus } from 'react-icons/fa6'
 import { useTranslation } from 'react-i18next'
-import { isValidCron } from 'cron-validator';
+import { isValidCron } from 'cron-validator'
+import SettingItem from '../base/base-setting-item'
 
 interface Props {
   item: IProfileItem
-  updateProfileItem: (item: IProfileItem) => Promise<void>
+  mode?: 'edit' | 'import'
+  updateProfileItem?: (item: IProfileItem) => Promise<void>
+  addProfileItem?: (item: Partial<IProfileItem>) => Promise<void>
   onClose: () => void
 }
 const EditInfoModal: React.FC<Props> = (props) => {
-  const { item, updateProfileItem, onClose } = props
+  const { item, mode = 'edit', updateProfileItem, addProfileItem, onClose } = props
   const { overrideConfig } = useOverrideConfig()
   const { items: overrideItems = [] } = overrideConfig || {}
-  const [values, setValues] = useState(item)
+  const [values, setValues] = useState({
+    ...item
+  })
   const inputWidth = 'w-[400px] md:w-[400px] lg:w-[600px] xl:w-[800px]'
   const { t } = useTranslation()
+  const isImportMode = mode === 'import'
+  const canSave =
+    !isImportMode || (values.type === 'remote' ? Boolean(values.url?.trim()) : values.file != null)
 
   const onSave = async (): Promise<void> => {
     try {
@@ -43,14 +58,34 @@ const EditInfoModal: React.FC<Props> = (props) => {
           (i) =>
             overrideItems.find((t) => t.id === i) && !overrideItems.find((t) => t.id === i)?.global
         )
-      };
-      await updateProfileItem(updatedItem)
-      await addProfileUpdater(updatedItem)
-      await restartCore()
+      }
+      if (isImportMode) {
+        if (!addProfileItem) throw new Error('Missing profile import handler')
+        await addProfileItem(updatedItem)
+      } else {
+        if (!updateProfileItem) throw new Error('Missing profile update handler')
+        await updateProfileItem(updatedItem)
+        await addProfileUpdater(updatedItem)
+        await mihomoHotReloadConfig()
+      }
       onClose()
     } catch (e) {
-      alert(e)
+      toast.error(String(e))
     }
+  }
+
+  const selectLocalFile = async (): Promise<void> => {
+    const files = await getFilePath(['yml', 'yaml'])
+    if (!files?.length) return
+
+    const file = await readTextFile(files[0])
+    const fileName = files[0].split('/').pop()?.split('\\').pop()
+    setValues({
+      ...values,
+      type: 'local',
+      file,
+      name: values.name || fileName || values.name
+    })
   }
 
   return (
@@ -67,8 +102,30 @@ const EditInfoModal: React.FC<Props> = (props) => {
       scrollBehavior="inside"
     >
       <ModalContent>
-        <ModalHeader className="flex app-drag">{t('profiles.editInfo.title')}</ModalHeader>
+        <ModalHeader className="flex app-drag">
+          {isImportMode ? t('profiles.import') : t('profiles.editInfo.title')}
+        </ModalHeader>
         <ModalBody>
+          {isImportMode && (
+            <SettingItem title={t('profiles.editInfo.type')}>
+              <Select
+                classNames={{ trigger: 'data-[hover=true]:bg-default-200' }}
+                size="sm"
+                className={cn(inputWidth)}
+                selectedKeys={new Set([values.type])}
+                disallowEmptySelection={true}
+                onSelectionChange={(v) => {
+                  setValues({
+                    ...values,
+                    type: v.currentKey as 'remote' | 'local'
+                  })
+                }}
+              >
+                <SelectItem key="remote">{t('profiles.remote')}</SelectItem>
+                <SelectItem key="local">{t('profiles.local')}</SelectItem>
+              </Select>
+            </SettingItem>
+          )}
           <SettingItem title={t('profiles.editInfo.name')}>
             <Input
               size="sm"
@@ -79,6 +136,33 @@ const EditInfoModal: React.FC<Props> = (props) => {
               }}
             />
           </SettingItem>
+          <SettingItem title={t('profiles.editInfo.ageSecretKey')}>
+            <Input
+              size="sm"
+              type="password"
+              className={cn(inputWidth)}
+              value={values.ageSecretKey || ''}
+              onValueChange={(v) => {
+                setValues({ ...values, ageSecretKey: v || undefined })
+              }}
+              placeholder={t('profiles.editInfo.ageSecretKeyPlaceholder')}
+            />
+          </SettingItem>
+          {isImportMode && values.type === 'local' && (
+            <SettingItem title={t('profiles.editInfo.file')}>
+              <div className={cn(inputWidth, 'flex justify-end')}>
+                <Button
+                  size="sm"
+                  variant={values.file ? 'flat' : 'solid'}
+                  onPress={selectLocalFile}
+                >
+                  {values.file
+                    ? values.name || t('profiles.editInfo.selectFile')
+                    : t('profiles.editInfo.selectFile')}
+                </Button>
+              </div>
+            </SettingItem>
+          )}
           {values.type === 'remote' && (
             <>
               <SettingItem title={t('profiles.editInfo.url')}>
@@ -91,6 +175,29 @@ const EditInfoModal: React.FC<Props> = (props) => {
                   }}
                 />
               </SettingItem>
+              <SettingItem title={t('profiles.editInfo.authToken')}>
+                <Input
+                  size="sm"
+                  type="password"
+                  className={cn(inputWidth)}
+                  value={values.authToken || ''}
+                  onValueChange={(v) => {
+                    setValues({ ...values, authToken: v })
+                  }}
+                  placeholder={t('profiles.editInfo.authTokenPlaceholder')}
+                />
+              </SettingItem>
+              <SettingItem title={t('profiles.editInfo.userAgent')}>
+                <Input
+                  size="sm"
+                  className={cn(inputWidth)}
+                  value={values.userAgent || ''}
+                  onValueChange={(v) => {
+                    setValues({ ...values, userAgent: v || undefined })
+                  }}
+                  placeholder={t('profiles.editInfo.userAgentPlaceholder')}
+                />
+              </SettingItem>
               <SettingItem title={t('profiles.editInfo.useProxy')}>
                 <Switch
                   size="sm"
@@ -100,66 +207,99 @@ const EditInfoModal: React.FC<Props> = (props) => {
                   }}
                 />
               </SettingItem>
-              <SettingItem title={t('profiles.editInfo.interval')}>
-                <div className="flex flex-col gap-2">
-                  <Input
-                    size="sm"
-                    type="text"
-                    className={cn(
-                      inputWidth,
-                      // 不合法
-                      typeof values.interval === 'string' && 
-                      !/^\d+$/.test(values.interval) && 
-                      !isValidCron(values.interval, { seconds: false }) && 
-                      'border-red-500'
-                    )}
-                    value={values.interval?.toString() ?? ''}
-                    onValueChange={(v) => {
-                      // 输入限制
-                      if (/^[\d\s*\-,\/]*$/.test(v)) {
-                        // 纯数字
-                        if (/^\d+$/.test(v)) {
-                          setValues({ ...values, interval: parseInt(v, 10) || 0 });
-                          return;
-                        }
-                        // 非纯数字
-                        try {
-                          setValues({ ...values, interval: v });
-                        } catch (e) {
-                          // ignore
-                        }
-                      }
-                    }}
-                    placeholder="例如：30 或 '0 * * * *'"
-                  />
-
-                  {/* 动态提示信息 */}
-                  <div className="text-xs" style={{
-                    color: typeof values.interval === 'string' && 
-                          !/^\d+$/.test(values.interval) &&
-                          !isValidCron(values.interval, { seconds: false }) 
-                          ? '#ef4444'
-                          : '#6b7280'
-                  }}>
-                    {typeof values.interval === 'number' ? (
-                      '以分钟为单位的定时间隔'
-                    ) : /^\d+$/.test(values.interval?.toString() || '') ? (
-                      '以分钟为单位的定时间隔'
-                    ) : isValidCron(values.interval?.toString() || '', { seconds: false }) ? (
-                      '有效的Cron表达式'
-                    ) : (
-                      '请输入数字或合法的Cron表达式（如：0 * * * *）'
-                    )}
-                  </div>
-                </div>
-              </SettingItem>
-              <SettingItem title={t('profiles.editInfo.fixedInterval')}>
+              <SettingItem title={t('profiles.editInfo.autoUpdate')}>
                 <Switch
                   size="sm"
-                  isSelected={values.allowFixedInterval ?? false}
+                  isSelected={values.autoUpdate ?? false}
                   onValueChange={(v) => {
-                    setValues({ ...values, allowFixedInterval: v })
+                    setValues({ ...values, autoUpdate: v })
                   }}
+                />
+              </SettingItem>
+              {values.autoUpdate && (
+                <>
+                  <SettingItem title={t('profiles.editInfo.interval')}>
+                    <div className="flex flex-col gap-2">
+                      <Input
+                        size="sm"
+                        type="text"
+                        className={cn(
+                          inputWidth,
+                          // 不合法
+                          typeof values.interval === 'string' &&
+                            !/^\d+$/.test(values.interval) &&
+                            !isValidCron(values.interval, { seconds: false }) &&
+                            'border-red-500'
+                        )}
+                        value={values.interval?.toString() ?? ''}
+                        onValueChange={(v) => {
+                          // 输入限制
+                          if (/^[\d\s*\-,/]*$/.test(v)) {
+                            // 纯数字
+                            if (/^\d+$/.test(v)) {
+                              setValues({ ...values, interval: parseInt(v, 10) || 0 })
+                              return
+                            }
+                            // 非纯数字
+                            try {
+                              setValues({ ...values, interval: v })
+                            } catch {
+                              // ignore
+                            }
+                          }
+                        }}
+                        placeholder={t('profiles.editInfo.intervalPlaceholder')}
+                      />
+
+                      {/* 动态提示信息 */}
+                      <div
+                        className="text-xs"
+                        style={{
+                          color:
+                            typeof values.interval === 'string' &&
+                            !/^\d+$/.test(values.interval) &&
+                            !isValidCron(values.interval, { seconds: false })
+                              ? '#ef4444'
+                              : '#6b7280'
+                        }}
+                      >
+                        {typeof values.interval === 'number'
+                          ? t('profiles.editInfo.intervalMinutes')
+                          : /^\d+$/.test(values.interval?.toString() || '')
+                            ? t('profiles.editInfo.intervalMinutes')
+                            : isValidCron(values.interval?.toString() || '', { seconds: false })
+                              ? t('profiles.editInfo.intervalCron')
+                              : t('profiles.editInfo.intervalHint')}
+                      </div>
+                    </div>
+                  </SettingItem>
+                  <SettingItem title={t('profiles.editInfo.fixedInterval')}>
+                    <Switch
+                      size="sm"
+                      isSelected={values.allowFixedInterval ?? false}
+                      onValueChange={(v) => {
+                        setValues({ ...values, allowFixedInterval: v })
+                      }}
+                    />
+                  </SettingItem>
+                </>
+              )}
+              <SettingItem title={t('profiles.editInfo.updateTimeout')}>
+                <Input
+                  size="sm"
+                  type="text"
+                  className={cn(inputWidth)}
+                  value={values.updateTimeout?.toString() ?? ''}
+                  onValueChange={(v) => {
+                    if (v === '') {
+                      setValues({ ...values, updateTimeout: undefined })
+                      return
+                    }
+                    if (/^\d+$/.test(v)) {
+                      setValues({ ...values, updateTimeout: parseInt(v, 10) })
+                    }
+                  }}
+                  placeholder={t('profiles.editInfo.updateTimeoutPlaceholder')}
                 />
               </SettingItem>
             </>
@@ -231,8 +371,8 @@ const EditInfoModal: React.FC<Props> = (props) => {
           <Button size="sm" variant="light" onPress={onClose}>
             {t('common.cancel')}
           </Button>
-          <Button size="sm" color="primary" onPress={onSave}>
-            {t('common.save')}
+          <Button size="sm" color="primary" isDisabled={!canSave} onPress={onSave}>
+            {isImportMode ? t('profiles.import') : t('common.save')}
           </Button>
         </ModalFooter>
       </ModalContent>

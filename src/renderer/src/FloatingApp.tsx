@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import MihomoIcon from './components/base/mihomo-icon'
 import { calcTraffic } from './utils/calc'
 import { showContextMenu, triggerMainWindow } from './utils/ipc'
@@ -48,20 +48,23 @@ const FloatingApp: React.FC = () => {
     }
   }, [spinSpeed, spinFloatingIcon])
 
-  useEffect(() => {
-    window.electron.ipcRenderer.on('mihomoTraffic', async (_e, info: IMihomoTrafficInfo) => {
-      setUpload(info.up)
-      setDownload(info.down)
-    })
-    return (): void => {
-      window.electron.ipcRenderer.removeAllListeners('mihomoTraffic')
-    }
+  const handleTraffic = useCallback((_e: unknown, ...args: unknown[]) => {
+    const info = args[0] as IMihomoTrafficInfo
+    setUpload(info.up)
+    setDownload(info.down)
   }, [])
+
+  useEffect(() => {
+    window.electron.ipcRenderer.on('mihomoTraffic', handleTraffic)
+    return (): void => {
+      window.electron.ipcRenderer.removeListener('mihomoTraffic', handleTraffic)
+    }
+  }, [handleTraffic])
 
   return (
     <div className="app-drag h-screen w-screen overflow-hidden">
       <div className="floating-bg border border-divider flex bg-content1 h-full w-full">
-        <div className="flex justify-center items-center h-full aspect-square">
+        <div className="flex shrink-0 justify-center items-center h-full aspect-square">
           <div
             onContextMenu={(e) => {
               e.preventDefault()
@@ -83,7 +86,7 @@ const FloatingApp: React.FC = () => {
             <MihomoIcon className="floating-icon text-primary-foreground h-full leading-full text-[22px] mx-auto" />
           </div>
         </div>
-        <div className="w-full overflow-hidden">
+        <div className="flex-1 min-w-0 overflow-hidden">
           <div className="flex flex-col justify-center h-full w-full">
             <h2 className="text-end floating-text whitespace-nowrap text-[12px] mr-2 font-bold">
               {calcTraffic(upload)}/s

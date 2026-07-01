@@ -1,14 +1,15 @@
 import { Button, Card, CardBody, CardFooter, Tooltip } from '@heroui/react'
-import { useControledMihomoConfig } from '@renderer/hooks/use-controled-mihomo-config'
+import { toast } from '@renderer/components/base/toast'
 import BorderSwitch from '@renderer/components/base/border-swtich'
 import { LuServer } from 'react-icons/lu'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { restartCore } from '@renderer/utils/ipc'
+import { mihomoHotReloadConfig } from '@renderer/utils/ipc'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useAppConfig } from '@renderer/hooks/use-app-config'
 import React from 'react'
 import { useTranslation } from 'react-i18next'
+import { DEFAULT_CONTROL_DNS } from '../../../../shared/appConfig'
 
 interface Props {
   iconOnly?: boolean
@@ -17,11 +18,14 @@ const DNSCard: React.FC<Props> = (props) => {
   const { t } = useTranslation()
   const { appConfig, patchAppConfig } = useAppConfig()
   const { iconOnly } = props
-  const { dnsCardStatus = 'col-span-1', controlDns = true, disableAnimations = false } = appConfig || {}
+  const {
+    dnsCardStatus = 'col-span-1',
+    controlDns = DEFAULT_CONTROL_DNS,
+    disableAnimations = false
+  } = appConfig || {}
   const location = useLocation()
   const navigate = useNavigate()
   const match = location.pathname.includes('/dns')
-  const { patchControledMihomoConfig } = useControledMihomoConfig()
   const {
     attributes,
     listeners,
@@ -36,10 +40,9 @@ const DNSCard: React.FC<Props> = (props) => {
   const onChange = async (controlDns: boolean): Promise<void> => {
     try {
       await patchAppConfig({ controlDns })
-      await patchControledMihomoConfig({})
-      await restartCore()
+      await mihomoHotReloadConfig()
     } catch (e) {
-      alert(e)
+      toast.error(String(e))
     }
   }
 
@@ -78,7 +81,7 @@ const DNSCard: React.FC<Props> = (props) => {
         ref={setNodeRef}
         {...attributes}
         {...listeners}
-        className={`${match ? 'bg-primary' : 'hover:bg-primary/30'} ${isDragging ? `${disableAnimations ? '' : 'scale-[0.95] tap-highlight-transparent'}` : ''}`}
+        className={`${match ? 'bg-primary' : 'hover:bg-primary/30'} ${disableAnimations ? '' : `motion-reduce:transition-transform-background ${isDragging ? 'scale-[0.95] tap-highlight-transparent' : ''}`}`}
       >
         <CardBody className="pb-1 pt-0 px-0">
           <div className="flex justify-between">

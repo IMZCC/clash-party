@@ -1,4 +1,5 @@
 import { Navigate } from 'react-router-dom'
+import NetworkPage from '@renderer/pages/network'
 import Override from '@renderer/pages/override'
 import Proxies from '@renderer/pages/proxies'
 import Rules from '@renderer/pages/rules'
@@ -13,7 +14,23 @@ import Resources from '@renderer/pages/resources'
 import DNS from '@renderer/pages/dns'
 import Sniffer from '@renderer/pages/sniffer'
 import SubStore from '@renderer/pages/substore'
+import Traffic from '@renderer/pages/traffic'
+import { useAppConfig } from '@renderer/hooks/use-app-config'
+import { getSiderCardRoute } from '@renderer/utils/sider'
+
+const HomeRedirect: React.FC = () => {
+  const { appConfig } = useAppConfig()
+
+  if (!appConfig) return null
+  const dest = appConfig.rememberSelectedSiderCard ? appConfig.lastSelectedSiderCard : 'proxy'
+  return <Navigate to={getSiderCardRoute(dest)} replace />
+}
+
 const routes = [
+  {
+    path: '/network',
+    element: <NetworkPage />
+  },
   {
     path: '/mihomo',
     element: <Mihomo />
@@ -71,8 +88,12 @@ const routes = [
     element: <SubStore />
   },
   {
+    path: '/traffic',
+    element: <Traffic />
+  },
+  {
     path: '/',
-    element: <Navigate to="/proxies" />
+    element: <HomeRedirect />
   }
 ]
 

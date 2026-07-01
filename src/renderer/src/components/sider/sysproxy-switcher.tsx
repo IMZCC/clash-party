@@ -1,8 +1,9 @@
 import { Button, Card, CardBody, CardFooter, Tooltip } from '@heroui/react'
+import { toast } from '@renderer/components/base/toast'
 import BorderSwitch from '@renderer/components/base/border-swtich'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAppConfig } from '@renderer/hooks/use-app-config'
-import { triggerSysProxy, updateTrayIcon, updateTrayIconImmediate } from '@renderer/utils/ipc'
+import { triggerSysProxy, updateTrayIconImmediate } from '@renderer/utils/ipc'
 import { useControledMihomoConfig } from '@renderer/hooks/use-controled-mihomo-config'
 import { AiOutlineGlobal } from 'react-icons/ai'
 import React from 'react'
@@ -39,22 +40,21 @@ const SysproxySwitcher: React.FC<Props> = (props) => {
   const onChange = async (enable: boolean): Promise<void> => {
     const previousState = !enable
     const tunEnabled = tun?.enable ?? false
-    
+
     // 立即更新图标
     updateTrayIconImmediate(enable, tunEnabled)
-    
+
     try {
       await patchAppConfig({ sysProxy: { enable } })
       await triggerSysProxy(enable)
-      
+
       window.electron.ipcRenderer.send('updateFloatingWindow')
       window.electron.ipcRenderer.send('updateTrayMenu')
-      await updateTrayIcon()
     } catch (e) {
       await patchAppConfig({ sysProxy: { enable: previousState } })
       // 回滚图标
       updateTrayIconImmediate(previousState, tunEnabled)
-      alert(e)
+      toast.error(String(e))
     }
   }
 
@@ -93,7 +93,7 @@ const SysproxySwitcher: React.FC<Props> = (props) => {
         ref={setNodeRef}
         {...attributes}
         {...listeners}
-        className={`${match ? 'bg-primary' : 'hover:bg-primary/30'} ${isDragging ? `${disableAnimations ? '' : 'scale-[0.95] tap-highlight-transparent'}` : ''}`}
+        className={`${match ? 'bg-primary' : 'hover:bg-primary/30'} ${disableAnimations ? '' : `motion-reduce:transition-transform-background ${isDragging ? 'scale-[0.95] tap-highlight-transparent' : ''}`}`}
       >
         <CardBody className="pb-1 pt-0 px-0">
           <div className="flex justify-between">

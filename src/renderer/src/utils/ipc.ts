@@ -1,548 +1,387 @@
 import { TitleBarOverlayOptions } from 'electron'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function ipcErrorWrapper(response: any): any {
-  if (typeof response === 'object' && 'invokeError' in response) {
-    throw response.invokeError
-  } else {
-    return response
+function checkIpcError<T>(response: unknown): T {
+  if (response && typeof response === 'object' && 'invokeError' in response) {
+    throw (response as { invokeError: unknown }).invokeError
   }
-}
-
-// GitHub版本管理相关IPC调用
-export async function fetchMihomoTags(forceRefresh = false): Promise<{name: string, zipball_url: string, tarball_url: string}[]> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('fetchMihomoTags', forceRefresh))
-}
-
-export async function installSpecificMihomoCore(version: string): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('installSpecificMihomoCore', version))
-}
-
-export async function clearMihomoVersionCache(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('clearMihomoVersionCache'))
-}
-
-export async function mihomoVersion(): Promise<IMihomoVersion> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('mihomoVersion'))
-}
-
-export async function mihomoCloseConnection(id: string): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('mihomoCloseConnection', id))
-}
-
-export async function mihomoCloseAllConnections(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('mihomoCloseAllConnections'))
-}
-
-export async function mihomoRules(): Promise<IMihomoRulesInfo> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('mihomoRules'))
-}
-
-export async function mihomoProxies(): Promise<IMihomoProxies> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('mihomoProxies'))
-}
-
-export async function mihomoGroups(): Promise<IMihomoMixedGroup[]> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('mihomoGroups'))
-}
-
-export async function mihomoProxyProviders(): Promise<IMihomoProxyProviders> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('mihomoProxyProviders'))
-}
-
-export async function mihomoUpdateProxyProviders(name: string): Promise<void> {
-  return ipcErrorWrapper(
-    await window.electron.ipcRenderer.invoke('mihomoUpdateProxyProviders', name)
-  )
-}
-
-export async function mihomoRuleProviders(): Promise<IMihomoRuleProviders> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('mihomoRuleProviders'))
-}
-
-export async function mihomoUpdateRuleProviders(name: string): Promise<void> {
-  return ipcErrorWrapper(
-    await window.electron.ipcRenderer.invoke('mihomoUpdateRuleProviders', name)
-  )
-}
-
-export async function mihomoChangeProxy(group: string, proxy: string): Promise<IMihomoProxy> {
-  return ipcErrorWrapper(
-    await window.electron.ipcRenderer.invoke('mihomoChangeProxy', group, proxy)
-  )
-}
-
-export async function mihomoUnfixedProxy(group: string): Promise<IMihomoProxy> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('mihomoUnfixedProxy', group))
-}
-
-export async function mihomoUpgradeGeo(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('mihomoUpgradeGeo'))
-}
-
-export async function mihomoUpgrade(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('mihomoUpgrade'))
-}
-
-export async function mihomoUpgradeUI(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('mihomoUpgradeUI'))
-}
-
-export async function mihomoUpgradeConfig(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('mihomoUpgradeConfig'))
-}
-
-export async function mihomoProxyDelay(proxy: string, url?: string): Promise<IMihomoDelay> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('mihomoProxyDelay', proxy, url))
-}
-
-export async function mihomoGroupDelay(group: string, url?: string): Promise<IMihomoGroupDelay> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('mihomoGroupDelay', group, url))
-}
-
-export async function mihomoSmartGroupWeights(groupName: string): Promise<Record<string, number>> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('mihomoSmartGroupWeights', groupName))
-}
-
-export async function mihomoSmartFlushCache(configName?: string): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('mihomoSmartFlushCache', configName))
-}
-
-export async function showDetailedError(title: string, message: string): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('showDetailedError', title, message))
-}
-
-export async function getSmartOverrideContent(): Promise<string | null> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('getSmartOverrideContent'))
-}
-
-export async function patchMihomoConfig(patch: Partial<IMihomoConfig>): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('patchMihomoConfig', patch))
-}
-
-export async function checkAutoRun(): Promise<boolean> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('checkAutoRun'))
-}
-
-export async function enableAutoRun(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('enableAutoRun'))
-}
-
-export async function disableAutoRun(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('disableAutoRun'))
-}
-
-export async function getAppConfig(force = false): Promise<IAppConfig> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('getAppConfig', force))
-}
-
-export async function patchAppConfig(patch: Partial<IAppConfig>): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('patchAppConfig', patch))
-}
-
-export async function getControledMihomoConfig(force = false): Promise<Partial<IMihomoConfig>> {
-  return ipcErrorWrapper(
-    await window.electron.ipcRenderer.invoke('getControledMihomoConfig', force)
-  )
-}
-
-export async function patchControledMihomoConfig(patch: Partial<IMihomoConfig>): Promise<void> {
-  return ipcErrorWrapper(
-    await window.electron.ipcRenderer.invoke('patchControledMihomoConfig', patch)
-  )
-}
-
-export async function getProfileConfig(force = false): Promise<IProfileConfig> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('getProfileConfig', force))
-}
-
-export async function setProfileConfig(config: IProfileConfig): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('setProfileConfig', config))
-}
-
-export async function getCurrentProfileItem(): Promise<IProfileItem> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('getCurrentProfileItem'))
-}
-
-export async function getProfileItem(id: string | undefined): Promise<IProfileItem> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('getProfileItem', id))
-}
-
-export async function changeCurrentProfile(id: string): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('changeCurrentProfile', id))
-}
-
-export async function addProfileItem(item: Partial<IProfileItem>): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('addProfileItem', item))
-}
-
-export async function removeProfileItem(id: string): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('removeProfileItem', id))
-}
-
-export async function updateProfileItem(item: IProfileItem): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('updateProfileItem', item))
-}
-
-export async function addProfileUpdater(item: IProfileItem): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('addProfileUpdater', item))
-}
-
-export async function removeProfileUpdater(id: string): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('removeProfileUpdater', id))
-}
-
-export async function getProfileStr(id: string): Promise<string> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('getProfileStr', id))
-}
-
-export async function getFileStr(id: string): Promise<string> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('getFileStr', id))
-}
-
-export async function setFileStr(id: string, str: string): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('setFileStr', id, str))
-}
-
-export async function setProfileStr(id: string, str: string): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('setProfileStr', id, str))
-}
-
-export async function getOverrideConfig(force = false): Promise<IOverrideConfig> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('getOverrideConfig', force))
-}
-
-export async function setOverrideConfig(config: IOverrideConfig): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('setOverrideConfig', config))
-}
-
-export async function getOverrideItem(id: string): Promise<IOverrideItem | undefined> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('getOverrideItem', id))
-}
-
-export async function addOverrideItem(item: Partial<IOverrideItem>): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('addOverrideItem', item))
-}
-
-export async function removeOverrideItem(id: string): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('removeOverrideItem', id))
-}
-
-export async function updateOverrideItem(item: IOverrideItem): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('updateOverrideItem', item))
-}
-
-export async function getOverride(id: string, ext: 'js' | 'yaml' | 'log'): Promise<string> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('getOverride', id, ext))
-}
-
-export async function setOverride(id: string, ext: 'js' | 'yaml', str: string): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('setOverride', id, ext, str))
-}
-
-export async function restartCore(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('restartCore'))
-}
-
-export async function startMonitor(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('startMonitor'))
-}
-
-export async function triggerSysProxy(enable: boolean): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('triggerSysProxy', enable))
-}
-
-export async function checkTunPermissions(): Promise<boolean> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('checkTunPermissions'))
-}
-
-export async function grantTunPermissions(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('grantTunPermissions'))
-}
-
-export async function manualGrantCorePermition(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('manualGrantCorePermition'))
-}
-
-export async function checkHighPrivilegeCore(): Promise<boolean> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('checkHighPrivilegeCore'))
-}
-
-export async function checkAdminPrivileges(): Promise<boolean> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('checkAdminPrivileges'))
-}
-
-export async function restartAsAdmin(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('restartAsAdmin'))
-}
-
-export async function showTunPermissionDialog(): Promise<boolean> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('showTunPermissionDialog'))
-}
-
-export async function showErrorDialog(title: string, message: string): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('showErrorDialog', title, message))
-}
-
-export async function getFilePath(ext: string[]): Promise<string[] | undefined> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('getFilePath', ext))
-}
-
-export async function readTextFile(filePath: string): Promise<string> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('readTextFile', filePath))
-}
-
-export async function getRuntimeConfigStr(): Promise<string> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('getRuntimeConfigStr'))
-}
-
-export async function getRuntimeConfig(): Promise<IMihomoConfig> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('getRuntimeConfig'))
-}
-
-export async function checkUpdate(): Promise<IAppVersion | undefined> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('checkUpdate'))
-}
-
-export async function downloadAndInstallUpdate(version: string): Promise<void> {
-  return ipcErrorWrapper(
-    await window.electron.ipcRenderer.invoke('downloadAndInstallUpdate', version)
-  )
-}
-
-export async function getVersion(): Promise<string> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('getVersion'))
-}
-
-export async function getPlatform(): Promise<NodeJS.Platform> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('platform'))
-}
-
-export async function openUWPTool(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('openUWPTool'))
-}
-
-export async function setupFirewall(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('setupFirewall'))
-}
-
-export async function getInterfaces(): Promise<Record<string, NetworkInterfaceInfo[]>> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('getInterfaces'))
-}
-
-export async function webdavBackup(): Promise<boolean> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('webdavBackup'))
-}
-
-export async function webdavRestore(filename: string): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('webdavRestore', filename))
-}
-
-export async function listWebdavBackups(): Promise<string[]> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('listWebdavBackups'))
-}
-
-export async function webdavDelete(filename: string): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('webdavDelete', filename))
-}
-
-// WebDAV 备份调度器相关 IPC 调用
-export async function reinitWebdavBackupScheduler(): Promise<void> {
-  return ipcErrorWrapper(
-    await window.electron.ipcRenderer.invoke('reinitWebdavBackupScheduler')
-  )
-}
-
-export async function setTitleBarOverlay(overlay: TitleBarOverlayOptions): Promise<void> {
-  try {
-    return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('setTitleBarOverlay', overlay))
-  } catch (error) {
-    console.debug('setTitleBarOverlay not supported on this platform')
-  }
-}
-
-export async function setAlwaysOnTop(alwaysOnTop: boolean): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('setAlwaysOnTop', alwaysOnTop))
-}
-
-export async function isAlwaysOnTop(): Promise<boolean> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('isAlwaysOnTop'))
-}
-
-export async function relaunchApp(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('relaunchApp'))
-}
-
-export async function quitWithoutCore(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('quitWithoutCore'))
-}
-
-export async function quitApp(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('quitApp'))
-}
-
-export async function setNativeTheme(theme: 'system' | 'light' | 'dark'): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('setNativeTheme', theme))
-}
-
-export async function getGistUrl(): Promise<string> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('getGistUrl'))
-}
-
-export async function startSubStoreFrontendServer(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('startSubStoreFrontendServer'))
-}
-
-export async function stopSubStoreFrontendServer(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('stopSubStoreFrontendServer'))
-}
-
-export async function startSubStoreBackendServer(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('startSubStoreBackendServer'))
-}
-
-export async function stopSubStoreBackendServer(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('stopSubStoreBackendServer'))
-}
-export async function downloadSubStore(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('downloadSubStore'))
-}
-
-export async function subStorePort(): Promise<number> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('subStorePort'))
-}
-
-export async function subStoreFrontendPort(): Promise<number> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('subStoreFrontendPort'))
-}
-
-export async function subStoreSubs(): Promise<ISubStoreSub[]> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('subStoreSubs'))
-}
-
-export async function subStoreCollections(): Promise<ISubStoreSub[]> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('subStoreCollections'))
-}
-
-export async function showTrayIcon(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('showTrayIcon'))
-}
-
-export async function closeTrayIcon(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('closeTrayIcon'))
-}
-
-export async function updateTrayIcon(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('updateTrayIcon'))
-}
-
-export function updateTrayIconImmediate(sysProxyEnabled: boolean, tunEnabled: boolean): void {
-  window.electron.ipcRenderer.invoke('updateTrayIconImmediate', sysProxyEnabled, tunEnabled)
-}
-
-export async function showMainWindow(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('showMainWindow'))
-}
-
-export async function closeMainWindow(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('closeMainWindow'))
-}
-
-export async function triggerMainWindow(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('triggerMainWindow'))
-}
-
-export async function showFloatingWindow(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('showFloatingWindow'))
-}
-
-export async function closeFloatingWindow(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('closeFloatingWindow'))
-}
-
-export async function showContextMenu(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('showContextMenu'))
-}
-
-export async function openFile(
-  type: 'profile' | 'override',
-  id: string,
-  ext?: 'yaml' | 'js'
-): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('openFile', type, id, ext))
-}
-
-export async function openDevTools(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('openDevTools'))
-}
-
-export async function resetAppConfig(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('resetAppConfig'))
-}
-
-export async function createHeapSnapshot(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('createHeapSnapshot'))
-}
-
-export async function getImageDataURL(url: string): Promise<string> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('getImageDataURL', url))
-}
-
-export async function resolveThemes(): Promise<{ key: string; label: string; content: string }[]> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('resolveThemes'))
-}
-
-export async function fetchThemes(): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('fetchThemes'))
-}
-
-export async function importThemes(files: string[]): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('importThemes', files))
-}
-
-export async function readTheme(theme: string): Promise<string> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('readTheme', theme))
-}
-
-export async function writeTheme(theme: string, css: string): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('writeTheme', theme, css))
-}
-
+  return response as T
+}
+
+async function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
+  const response = await window.electron.ipcRenderer.invoke(channel, ...args)
+  return checkIpcError<T>(response)
+}
+
+// IPC API 类型定义
+interface IpcApi {
+  // Mihomo API
+  mihomoVersion: () => Promise<IMihomoVersion>
+  mihomoCloseConnection: (id: string) => Promise<void>
+  mihomoCloseAllConnections: () => Promise<void>
+  mihomoRules: () => Promise<IMihomoRulesInfo>
+  mihomoRulesDisable: (rules: Record<string, boolean>) => Promise<void>
+  mihomoProxies: () => Promise<IMihomoProxies>
+  mihomoGroups: () => Promise<IMihomoMixedGroup[]>
+  mihomoProxyProviders: () => Promise<IMihomoProxyProviders>
+  mihomoUpdateProxyProviders: (name: string) => Promise<void>
+  mihomoRuleProviders: () => Promise<IMihomoRuleProviders>
+  mihomoUpdateRuleProviders: (name: string) => Promise<void>
+  mihomoChangeProxy: (group: string, proxy: string) => Promise<IMihomoProxy>
+  mihomoUnfixedProxy: (group: string) => Promise<IMihomoProxy>
+  mihomoUpgradeGeo: () => Promise<void>
+  mihomoUpgrade: () => Promise<void>
+  mihomoUpgradeUI: () => Promise<void>
+  mihomoProxyDelay: (proxy: string, url?: string) => Promise<IMihomoDelay>
+  mihomoGroupDelay: (group: string, url?: string) => Promise<IMihomoGroupDelay>
+  patchMihomoConfig: (patch: Partial<IMihomoConfig>) => Promise<void>
+  mihomoSmartGroupWeights: (groupName: string) => Promise<Record<string, number>>
+  mihomoSmartFlushCache: (configName?: string) => Promise<void>
+  getSmartOverrideContent: () => Promise<string | null>
+  // AutoRun
+  checkAutoRun: () => Promise<boolean>
+  enableAutoRun: () => Promise<void>
+  disableAutoRun: () => Promise<void>
+  // Config
+  getAppConfig: (force?: boolean) => Promise<IAppConfig>
+  patchAppConfig: (patch: Partial<IAppConfig>) => Promise<void>
+  getControledMihomoConfig: (force?: boolean) => Promise<Partial<IMihomoConfig>>
+  patchControledMihomoConfig: (patch: Partial<IMihomoConfig>) => Promise<void>
+  resetAppConfig: () => Promise<void>
+  // Profile
+  getProfileConfig: (force?: boolean) => Promise<IProfileConfig>
+  setProfileConfig: (config: IProfileConfig) => Promise<void>
+  getCurrentProfileItem: () => Promise<IProfileItem>
+  getProfileItem: (id: string | undefined) => Promise<IProfileItem>
+  getProfileStr: (id: string) => Promise<string>
+  setProfileStr: (id: string, str: string) => Promise<void>
+  addProfileItem: (item: Partial<IProfileItem>) => Promise<void>
+  removeProfileItem: (id: string) => Promise<void>
+  updateProfileItem: (item: IProfileItem) => Promise<void>
+  changeCurrentProfile: (id: string) => Promise<void>
+  addProfileUpdater: (item: IProfileItem) => Promise<void>
+  removeProfileUpdater: (id: string) => Promise<void>
+  // Override
+  getOverrideConfig: (force?: boolean) => Promise<IOverrideConfig>
+  setOverrideConfig: (config: IOverrideConfig) => Promise<void>
+  getOverrideItem: (id: string) => Promise<IOverrideItem | undefined>
+  addOverrideItem: (item: Partial<IOverrideItem>) => Promise<void>
+  removeOverrideItem: (id: string) => Promise<void>
+  updateOverrideItem: (item: IOverrideItem) => Promise<void>
+  getOverride: (id: string, ext: 'js' | 'yaml' | 'log') => Promise<string>
+  setOverride: (id: string, ext: 'js' | 'yaml', str: string) => Promise<void>
+  // File
+  getFileStr: (path: string) => Promise<string>
+  setFileStr: (path: string, str: string) => Promise<void>
+  convertMrsRuleset: (path: string, behavior: string) => Promise<string>
+  getRuntimeConfig: () => Promise<IMihomoConfig>
+  getRuntimeConfigStr: () => Promise<string>
+  getRuleStr: (id: string) => Promise<string>
+  setRuleStr: (id: string, str: string) => Promise<void>
+  getFilePath: (ext: string[], title?: string, filterName?: string) => Promise<string[] | undefined>
+  readTextFile: (filePath: string) => Promise<string>
+  readImageFileDataURL: (filePath: string) => Promise<string>
+  openFile: (type: 'profile' | 'override', id: string, ext?: 'yaml' | 'js') => Promise<void>
+  // Core
+  restartCore: () => Promise<void>
+  mihomoHotReloadConfig: () => Promise<void>
+  startMonitor: () => Promise<void>
+  quitWithoutCore: () => Promise<void>
+  // System
+  triggerSysProxy: (enable: boolean) => Promise<void>
+  checkTunPermissions: () => Promise<boolean>
+  grantTunPermissions: () => Promise<void>
+  manualGrantCorePermition: () => Promise<void>
+  checkAdminPrivileges: () => Promise<boolean>
+  restartAsAdmin: () => Promise<void>
+  checkMihomoCorePermissions: () => Promise<boolean>
+  checkHighPrivilegeCore: () => Promise<boolean>
+  showTunPermissionDialog: () => Promise<boolean>
+  showErrorDialog: (title: string, message: string) => Promise<void>
+  openUWPTool: () => Promise<void>
+  setupFirewall: () => Promise<void>
+  getInterfaces: () => Promise<Record<string, NetworkInterfaceInfo[]>>
+  setNativeTheme: (theme: 'system' | 'light' | 'dark') => Promise<void>
+  copyEnv: (type: 'bash' | 'cmd' | 'powershell' | 'fish' | 'nushell') => Promise<void>
+  // Update
+  checkUpdate: () => Promise<IAppVersion | undefined>
+  downloadAndInstallUpdate: (version: string) => Promise<void>
+  getVersion: () => Promise<string>
+  platform: () => Promise<NodeJS.Platform>
+  fetchMihomoTags: (
+    forceRefresh?: boolean
+  ) => Promise<{ name: string; zipball_url: string; tarball_url: string }[]>
+  installSpecificMihomoCore: (version: string) => Promise<void>
+  clearMihomoVersionCache: () => Promise<void>
+  // Backup
+  webdavBackup: () => Promise<boolean>
+  webdavRestore: (filename: string) => Promise<void>
+  listWebdavBackups: () => Promise<string[]>
+  webdavDelete: (filename: string) => Promise<void>
+  reinitWebdavBackupScheduler: () => Promise<void>
+  exportLocalBackup: () => Promise<boolean>
+  importLocalBackup: () => Promise<boolean>
+  // SubStore
+  startSubStoreFrontendServer: () => Promise<void>
+  stopSubStoreFrontendServer: () => Promise<void>
+  startSubStoreBackendServer: () => Promise<void>
+  stopSubStoreBackendServer: () => Promise<void>
+  downloadSubStore: () => Promise<void>
+  subStorePort: () => Promise<number>
+  subStoreFrontendPort: () => Promise<number>
+  subStoreSubs: () => Promise<ISubStoreSub[]>
+  subStoreCollections: () => Promise<ISubStoreSub[]>
+  // Theme
+  resolveThemes: () => Promise<{ key: string; label: string; content: string }[]>
+  fetchThemes: () => Promise<void>
+  importThemes: (files: string[]) => Promise<void>
+  readTheme: (theme: string) => Promise<string>
+  writeTheme: (theme: string, css: string) => Promise<void>
+  // Tray
+  showTrayIcon: () => Promise<void>
+  closeTrayIcon: () => Promise<void>
+  updateTrayIcon: () => Promise<void>
+  // Window
+  showMainWindow: () => Promise<void>
+  closeMainWindow: () => Promise<void>
+  triggerMainWindow: () => Promise<void>
+  showFloatingWindow: () => Promise<void>
+  closeFloatingWindow: () => Promise<void>
+  showContextMenu: () => Promise<void>
+  setAlwaysOnTop: (alwaysOnTop: boolean) => Promise<void>
+  isAlwaysOnTop: () => Promise<boolean>
+  openDevTools: () => Promise<void>
+  createHeapSnapshot: () => Promise<void>
+  // Shortcut
+  registerShortcut: (oldShortcut: string, newShortcut: string, action: string) => Promise<boolean>
+  // Plugin
+  getPluginConfig: (force?: boolean) => Promise<IPluginConfig>
+  previewPlugin: (fileBytesB64: string) => Promise<IPluginDescriptorPreview>
+  installPlugin: (fileBytesB64: string) => Promise<IPluginItem>
+  loginPlugin: (id: string) => Promise<void>
+  removePlugin: (id: string) => Promise<void>
+  updatePluginProfile: (id: string, force?: boolean) => Promise<void>
+  // Misc
+  getGistUrl: () => Promise<string>
+  generateGistAgeKeyPair: () => Promise<{ secretKey: string; recipient: string }>
+  exportGistAgeSecretKey: () => Promise<boolean>
+  fetchIPInfo: (url: string) => Promise<unknown>
+  measureLatency: (url: string) => Promise<number | null>
+  getImageDataURL: (url: string) => Promise<string>
+  relaunchApp: () => Promise<void>
+  quitApp: () => Promise<void>
+}
+
+// 使用 Proxy 自动生成 IPC 调用
+const ipc = new Proxy({} as IpcApi, {
+  get:
+    <K extends keyof IpcApi>(_: IpcApi, channel: K) =>
+    (...args: Parameters<IpcApi[K]>) =>
+      invoke(channel, ...args)
+})
+
+// 导出所有 IPC 方法
+export const {
+  // Mihomo API
+  mihomoVersion,
+  mihomoCloseConnection,
+  mihomoCloseAllConnections,
+  mihomoRules,
+  mihomoRulesDisable,
+  mihomoProxies,
+  mihomoGroups,
+  mihomoProxyProviders,
+  mihomoUpdateProxyProviders,
+  mihomoRuleProviders,
+  mihomoUpdateRuleProviders,
+  mihomoChangeProxy,
+  mihomoUnfixedProxy,
+  mihomoUpgradeGeo,
+  mihomoUpgrade,
+  mihomoUpgradeUI,
+  mihomoProxyDelay,
+  mihomoGroupDelay,
+  patchMihomoConfig,
+  mihomoSmartGroupWeights,
+  mihomoSmartFlushCache,
+  getSmartOverrideContent,
+  // AutoRun
+  checkAutoRun,
+  enableAutoRun,
+  disableAutoRun,
+  // Config
+  getAppConfig,
+  patchAppConfig,
+  getControledMihomoConfig,
+  patchControledMihomoConfig,
+  resetAppConfig,
+  // Profile
+  getProfileConfig,
+  setProfileConfig,
+  getCurrentProfileItem,
+  getProfileItem,
+  getProfileStr,
+  setProfileStr,
+  addProfileItem,
+  removeProfileItem,
+  updateProfileItem,
+  changeCurrentProfile,
+  addProfileUpdater,
+  removeProfileUpdater,
+  // Override
+  getOverrideConfig,
+  setOverrideConfig,
+  getOverrideItem,
+  addOverrideItem,
+  removeOverrideItem,
+  updateOverrideItem,
+  getOverride,
+  setOverride,
+  // File
+  getFileStr,
+  setFileStr,
+  convertMrsRuleset,
+  getRuntimeConfig,
+  getRuntimeConfigStr,
+  getRuleStr,
+  setRuleStr,
+  getFilePath,
+  readTextFile,
+  readImageFileDataURL,
+  openFile,
+  // Core
+  restartCore,
+  mihomoHotReloadConfig,
+  startMonitor,
+  quitWithoutCore,
+  // System
+  triggerSysProxy,
+  checkTunPermissions,
+  grantTunPermissions,
+  manualGrantCorePermition,
+  checkAdminPrivileges,
+  restartAsAdmin,
+  checkMihomoCorePermissions,
+  checkHighPrivilegeCore,
+  showTunPermissionDialog,
+  showErrorDialog,
+  openUWPTool,
+  setupFirewall,
+  getInterfaces,
+  setNativeTheme,
+  copyEnv,
+  // Update
+  checkUpdate,
+  downloadAndInstallUpdate,
+  getVersion,
+  fetchMihomoTags,
+  installSpecificMihomoCore,
+  clearMihomoVersionCache,
+  // Backup
+  webdavBackup,
+  webdavRestore,
+  listWebdavBackups,
+  webdavDelete,
+  reinitWebdavBackupScheduler,
+  exportLocalBackup,
+  importLocalBackup,
+  // SubStore
+  startSubStoreFrontendServer,
+  stopSubStoreFrontendServer,
+  startSubStoreBackendServer,
+  stopSubStoreBackendServer,
+  downloadSubStore,
+  subStorePort,
+  subStoreFrontendPort,
+  subStoreSubs,
+  subStoreCollections,
+  // Theme
+  resolveThemes,
+  fetchThemes,
+  importThemes,
+  readTheme,
+  writeTheme,
+  // Tray
+  showTrayIcon,
+  closeTrayIcon,
+  updateTrayIcon,
+  // Window
+  showMainWindow,
+  closeMainWindow,
+  triggerMainWindow,
+  showFloatingWindow,
+  closeFloatingWindow,
+  showContextMenu,
+  setAlwaysOnTop,
+  isAlwaysOnTop,
+  openDevTools,
+  createHeapSnapshot,
+  // Shortcut
+  registerShortcut,
+  // Plugin
+  getPluginConfig,
+  previewPlugin,
+  installPlugin,
+  loginPlugin,
+  removePlugin,
+  updatePluginProfile,
+  // Misc
+  getGistUrl,
+  generateGistAgeKeyPair,
+  exportGistAgeSecretKey,
+  fetchIPInfo,
+  measureLatency,
+  getImageDataURL,
+  relaunchApp,
+  quitApp
+} = ipc
+
+// platform 需要重命名导出
+export const getPlatform = ipc.platform
+
+// 需要特殊处理的函数
+
+// applyTheme: 防抖处理，避免频繁调用
 let applyThemeRunning = false
-const waitList: string[] = []
+let pendingTheme: string | null = null
+
 export async function applyTheme(theme: string): Promise<void> {
   if (applyThemeRunning) {
-    waitList.push(theme)
+    pendingTheme = theme
     return
   }
   applyThemeRunning = true
   try {
-    return await ipcErrorWrapper(window.electron.ipcRenderer.invoke('applyTheme', theme))
+    await invoke<void>('applyTheme', theme)
   } finally {
     applyThemeRunning = false
-    if (waitList.length > 0) {
-      await applyTheme(waitList.shift() || '')
+    if (pendingTheme !== null) {
+      const nextTheme = pendingTheme
+      pendingTheme = null
+      await applyTheme(nextTheme)
     }
   }
 }
 
-export async function registerShortcut(
-  oldShortcut: string,
-  newShortcut: string,
-  action: string
-): Promise<boolean> {
-  return ipcErrorWrapper(
-    await window.electron.ipcRenderer.invoke('registerShortcut', oldShortcut, newShortcut, action)
-  )
+// setTitleBarOverlay: 需要静默处理不支持的平台
+export async function setTitleBarOverlay(overlay: TitleBarOverlayOptions): Promise<void> {
+  try {
+    await invoke<void>('setTitleBarOverlay', overlay)
+  } catch {
+    // Not supported on this platform
+  }
 }
 
-export async function copyEnv(type: 'bash' | 'cmd' | 'powershell'): Promise<void> {
-  return ipcErrorWrapper(await window.electron.ipcRenderer.invoke('copyEnv', type))
+// updateTrayIconImmediate: 同步调用，不等待结果
+export function updateTrayIconImmediate(sysProxyEnabled: boolean, tunEnabled: boolean): void {
+  window.electron.ipcRenderer.invoke('updateTrayIconImmediate', sysProxyEnabled, tunEnabled)
 }
 
-async function alert<T>(msg: T): Promise<void> {
-  const msgStr = typeof msg === 'string' ? msg : JSON.stringify(msg)
-  return await window.electron.ipcRenderer.invoke('alert', msgStr)
+// getAppName: 获取应用程序名称
+export async function getAppName(appPath: string): Promise<string> {
+  return invoke<string>('getAppName', appPath)
 }
 
-window.alert = alert
+// getIconDataURL: 获取应用图标的 Base64 数据
+export async function getIconDataURL(appPath: string): Promise<string> {
+  return invoke<string>('getIconDataURL', appPath)
+}

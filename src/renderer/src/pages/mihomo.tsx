@@ -1,19 +1,45 @@
-import { Button, Divider, Input, Select, SelectItem, Switch, Tooltip, Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, useDisclosure, Spinner, Chip } from '@heroui/react'
+import {
+  Button,
+  Divider,
+  Input,
+  Select,
+  SelectItem,
+  Switch,
+  Tooltip,
+  Modal,
+  ModalContent,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  useDisclosure,
+  Spinner,
+  Chip
+} from '@heroui/react'
 import BasePage from '@renderer/components/base/base-page'
+import { toast } from '@renderer/components/base/toast'
+import { showError } from '@renderer/utils/error-display'
 import SettingCard from '@renderer/components/base/base-setting-card'
 import SettingItem from '@renderer/components/base/base-setting-item'
+import { isValidListenAddress, getError, isValid } from '@renderer/utils/validate'
 import { useAppConfig } from '@renderer/hooks/use-app-config'
 import { useControledMihomoConfig } from '@renderer/hooks/use-controled-mihomo-config'
 import { platform } from '@renderer/utils/init'
 import { FaNetworkWired } from 'react-icons/fa'
-import { IoMdCloudDownload, IoMdInformationCircleOutline, IoMdRefresh } from 'react-icons/io'
+import {
+  IoMdCloudDownload,
+  IoMdInformationCircleOutline,
+  IoMdRefresh,
+  IoMdShuffle,
+  IoMdEye,
+  IoMdEyeOff
+} from 'react-icons/io'
 import PubSub from 'pubsub-js'
 import {
   mihomoUpgrade,
+  mihomoHotReloadConfig,
   restartCore,
   startSubStoreBackendServer,
   triggerSysProxy,
-  showDetailedError,
   fetchMihomoTags,
   installSpecificMihomoCore,
   clearMihomoVersionCache
@@ -22,6 +48,11 @@ import React, { useState, useEffect, useRef } from 'react'
 import InterfaceModal from '@renderer/components/mihomo/interface-modal'
 import { MdDeleteForever, MdEdit, MdDelete, MdOpenInNew } from 'react-icons/md'
 import { useTranslation } from 'react-i18next'
+import {
+  DEFAULT_MIHOMO_LAN_ALLOWED_IPS,
+  DEFAULT_MIHOMO_PORTS,
+  DEFAULT_MIHOMO_SKIP_AUTH_PREFIXES
+} from '../../../shared/appConfig'
 
 const CoreMap = {
   mihomo: 'mihomo.stableVersion',
@@ -29,6 +60,34 @@ const CoreMap = {
   'mihomo-smart': 'mihomo.smartVersion',
   'mihomo-specific': 'mihomo.specificVersion'
 }
+
+interface WebUIPanel {
+  id: string
+  name: string
+  url: string
+  isDefault?: boolean
+}
+
+const defaultWebUIPanels: WebUIPanel[] = [
+  {
+    id: 'metacubexd',
+    name: 'MetaCubeXD',
+    url: 'https://metacubex.github.io/metacubexd/#/setup?http=true&hostname=%host&port=%port&secret=%secret',
+    isDefault: true
+  },
+  {
+    id: 'yacd',
+    name: 'YACD',
+    url: 'https://yacd.metacubex.one/?hostname=%host&port=%port&secret=%secret',
+    isDefault: true
+  },
+  {
+    id: 'zashboard',
+    name: 'Zashboard',
+    url: 'https://board.zash.run.place/#/setup?http=true&hostname=%host&port=%port&secret=%secret',
+    isDefault: true
+  }
+]
 
 const Mihomo: React.FC = () => {
   const { t } = useTranslation()
@@ -41,47 +100,58 @@ const Mihomo: React.FC = () => {
     smartCoreUseLightGBM = false,
     smartCoreCollectData = false,
     smartCoreStrategy = 'sticky-sessions',
+    smartCollectorSize = 100,
     maxLogDays = 7,
-    sysProxy 
+    maxLogFileSize = 10,
+    sysProxy,
+    showMixedPort,
+    enableMixedPort = true,
+    showSocksPort,
+    enableSocksPort = true,
+    showHttpPort,
+    enableHttpPort = true,
+    showRedirPort,
+    enableRedirPort = false,
+    showTproxyPort,
+    enableTproxyPort = false
   } = appConfig || {}
   const { controledMihomoConfig, patchControledMihomoConfig } = useControledMihomoConfig()
-
-  interface WebUIPanel {
-    id: string
-    name: string
-    url: string
-    isDefault?: boolean
-  }
 
   const {
     ipv6,
     'external-controller': externalController = '',
     secret = '',
     authentication = [],
-    'skip-auth-prefixes': skipAuthPrefixes = ['127.0.0.1/32', '::1/128'],
+    'skip-auth-prefixes': skipAuthPrefixes = DEFAULT_MIHOMO_SKIP_AUTH_PREFIXES,
     'log-level': logLevel = 'info',
     'find-process-mode': findProcessMode = 'strict',
     'allow-lan': allowLan,
-    'lan-allowed-ips': lanAllowedIps = ['0.0.0.0/0', '::/0'],
+    'lan-allowed-ips': lanAllowedIps = DEFAULT_MIHOMO_LAN_ALLOWED_IPS,
     'lan-disallowed-ips': lanDisallowedIps = [],
     'unified-delay': unifiedDelay,
     'tcp-concurrent': tcpConcurrent,
-    'mixed-port': mixedPort = 7890,
-    'socks-port': socksPort = 7891,
-    port: httpPort = 7892,
-    'redir-port': redirPort = 0,
-    'tproxy-port': tproxyPort = 0,
+    'mixed-port': mixedPort = DEFAULT_MIHOMO_PORTS.mixed,
+    'socks-port': socksPort = DEFAULT_MIHOMO_PORTS.socks,
+    port: httpPort = DEFAULT_MIHOMO_PORTS.http,
+    'redir-port': redirPort = DEFAULT_MIHOMO_PORTS.redir,
+    'tproxy-port': tproxyPort = DEFAULT_MIHOMO_PORTS.tproxy,
     profile = {}
   } = controledMihomoConfig || {}
   const { 'store-selected': storeSelected, 'store-fake-ip': storeFakeIp } = profile
 
-  const [mixedPortInput, setMixedPortInput] = useState(mixedPort)
-  const [socksPortInput, setSocksPortInput] = useState(socksPort)
-  const [httpPortInput, setHttpPortInput] = useState(httpPort)
-  const [redirPortInput, setRedirPortInput] = useState(redirPort)
-  const [tproxyPortInput, setTproxyPortInput] = useState(tproxyPort)
+  const [isManualPortChange, setIsManualPortChange] = useState(false)
+  const [mixedPortInput, setMixedPortInput] = useState(showMixedPort ?? mixedPort)
+  const [socksPortInput, setSocksPortInput] = useState(showSocksPort ?? socksPort)
+  const [httpPortInput, setHttpPortInput] = useState(showHttpPort ?? httpPort)
+  const [redirPortInput, setRedirPortInput] = useState(showRedirPort ?? redirPort)
+  const [tproxyPortInput, setTproxyPortInput] = useState(showTproxyPort ?? tproxyPort)
   const [externalControllerInput, setExternalControllerInput] = useState(externalController)
+  const [externalControllerError, setExternalControllerError] = useState<string | null>(() => {
+    const result = isValidListenAddress(externalController)
+    return isValid(result) ? null : (getError(result) ?? '格式错误')
+  })
   const [secretInput, setSecretInput] = useState(secret)
+  const [isSecretVisible, setIsSecretVisible] = useState(false)
   const [lanAllowedIpsInput, setLanAllowedIpsInput] = useState(lanAllowedIps)
   const [lanDisallowedIpsInput, setLanDisallowedIpsInput] = useState(lanDisallowedIps)
   const [authenticationInput, setAuthenticationInput] = useState(authentication)
@@ -89,22 +159,22 @@ const Mihomo: React.FC = () => {
   const [upgrading, setUpgrading] = useState(false)
   const [lanOpen, setLanOpen] = useState(false)
   const { isOpen, onOpen, onClose } = useDisclosure()
-  const [tags, setTags] = useState<{name: string, zipball_url: string, tarball_url: string}[]>([])
+  const [tags, setTags] = useState<{ name: string; zipball_url: string; tarball_url: string }[]>([])
   const [loadingTags, setLoadingTags] = useState(false)
   const [selectedTag, setSelectedTag] = useState(specificVersion || '')
   const [installing, setInstalling] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [refreshing, setRefreshing] = useState(false)
-  
-  // WebUI管理状态
+
+  // WebUI 管理状态
   const [isWebUIModalOpen, setIsWebUIModalOpen] = useState(false)
   const [allPanels, setAllPanels] = useState<WebUIPanel[]>([])
   const [editingPanel, setEditingPanel] = useState<WebUIPanel | null>(null)
   const [newPanelName, setNewPanelName] = useState('')
   const [newPanelUrl, setNewPanelUrl] = useState('')
-  
+
   const urlInputRef = useRef<HTMLInputElement>(null)
-  
+
   // 解析主机和端口
   const parseController = () => {
     if (externalController) {
@@ -113,31 +183,12 @@ const Mihomo: React.FC = () => {
     }
     return { host: '127.0.0.1', port: '9090' }
   }
-  
+
   const { host, port } = parseController()
-  
-  // 默认WebUI面板选项
-  const defaultWebUIPanels: WebUIPanel[] = [
-    {
-      id: 'metacubexd',
-      name: 'MetaCubeXD',
-      url: 'https://metacubex.github.io/metacubexd/#/setup?http=true&hostname=%host&port=%port&secret=%secret',
-      isDefault: true
-    },
-    {
-      id: 'yacd',
-      name: 'YACD',
-      url: 'https://yacd.metacubex.one/?hostname=%host&port=%port&secret=%secret',
-      isDefault: true
-    },
-    {
-      id: 'zashboard',
-      name: 'Zashboard',
-      url: 'https://board.zash.run.place/#/setup?http=true&hostname=%host&port=%port&secret=%secret',
-      isDefault: true
-    }
-  ]
-  
+
+  // 生成随机端口 (范围 1024-65535)
+  const generateRandomPort = () => Math.floor(Math.random() * (65535 - 1024 + 1)) + 1024
+
   // 初始化面板列表
   useEffect(() => {
     const savedPanels = localStorage.getItem('webui-panels')
@@ -147,28 +198,28 @@ const Mihomo: React.FC = () => {
       setAllPanels(defaultWebUIPanels)
     }
   }, [])
-  
-  // 保存面板列表到localStorage
+
+  // 保存面板列表到 localStorage
   useEffect(() => {
     if (allPanels.length > 0) {
       localStorage.setItem('webui-panels', JSON.stringify(allPanels))
     }
   }, [allPanels])
-  
-  // 在URL输入框光标处插入或替换变量
+
+  // 在 URL 输入框光标处插入或替换变量
   const insertVariableAtCursor = (variable: string) => {
     if (!urlInputRef.current) return
-    
+
     const input = urlInputRef.current
     const start = input.selectionStart || 0
     const end = input.selectionEnd || 0
     const currentValue = newPanelUrl || ''
-    
+
     // 如果有选中文本，则替换选中的文本
     const newValue = currentValue.substring(0, start) + variable + currentValue.substring(end)
-    
+
     setNewPanelUrl(newValue)
-    
+
     // 设置光标位置到插入变量之后
     setTimeout(() => {
       if (urlInputRef.current) {
@@ -178,16 +229,13 @@ const Mihomo: React.FC = () => {
       }
     }, 0)
   }
-  
-  // 打开WebUI面板
+
+  // 打开 WebUI 面板
   const openWebUI = (panel: WebUIPanel) => {
-    const url = panel.url
-      .replace('%host', host)
-      .replace('%port', port)
-      .replace('%secret', secret)
+    const url = panel.url.replace('%host', host).replace('%port', port).replace('%secret', secret)
     window.open(url, '_blank')
   }
-  
+
   // 添加新面板
   const addNewPanel = () => {
     if (newPanelName && newPanelUrl) {
@@ -202,14 +250,12 @@ const Mihomo: React.FC = () => {
       setEditingPanel(null)
     }
   }
-  
+
   // 更新面板
   const updatePanel = () => {
     if (editingPanel && newPanelName && newPanelUrl) {
-      const updatedPanels = allPanels.map(panel => 
-        panel.id === editingPanel.id 
-          ? { ...panel, name: newPanelName, url: newPanelUrl } 
-          : panel
+      const updatedPanels = allPanels.map((panel) =>
+        panel.id === editingPanel.id ? { ...panel, name: newPanelName, url: newPanelUrl } : panel
       )
       setAllPanels(updatedPanels)
       setEditingPanel(null)
@@ -217,35 +263,35 @@ const Mihomo: React.FC = () => {
       setNewPanelUrl('')
     }
   }
-  
+
   // 删除面板
   const deletePanel = (id: string) => {
-    setAllPanels(allPanels.filter(panel => panel.id !== id))
+    setAllPanels(allPanels.filter((panel) => panel.id !== id))
   }
-  
+
   // 开始编辑面板
   const startEditing = (panel: WebUIPanel) => {
     setEditingPanel(panel)
     setNewPanelName(panel.name)
     setNewPanelUrl(panel.url)
   }
-  
+
   // 取消编辑
   const cancelEditing = () => {
     setEditingPanel(null)
     setNewPanelName('')
     setNewPanelUrl('')
   }
-  
+
   // 恢复默认面板
   const restoreDefaultPanels = () => {
     setAllPanels(defaultWebUIPanels)
   }
-  
-  // 用于高亮显示URL中的变量
+
+  // 用于高亮显示 URL 中的变量
   const HighlightedUrl: React.FC<{ url: string }> = ({ url }) => {
     const parts = url.split(/(%host|%port|%secret)/g)
-    
+
     return (
       <p className="text-sm text-default-500 break-all">
         {parts.map((part, index) => {
@@ -261,14 +307,14 @@ const Mihomo: React.FC = () => {
       </p>
     )
   }
-  
+
   // 可点击的变量标签组件
-  const ClickableVariableTag: React.FC<{ 
-    variable: string; 
-    onClick: (variable: string) => void 
+  const ClickableVariableTag: React.FC<{
+    variable: string
+    onClick: (variable: string) => void
   }> = ({ variable, onClick }) => {
     return (
-      <span 
+      <span
         className="bg-warning-200 text-warning-800 px-1 rounded ml-1 cursor-pointer hover:bg-warning-300"
         onClick={() => onClick(variable)}
       >
@@ -276,13 +322,21 @@ const Mihomo: React.FC = () => {
       </span>
     )
   }
-  
+
   const onChangeNeedRestart = async (patch: Partial<IMihomoConfig>): Promise<void> => {
     await patchControledMihomoConfig(patch)
-    await restartCore()
+    try {
+      if (appConfig?.useHotReloadProfile) {
+        await mihomoHotReloadConfig()
+      } else {
+        await restartCore()
+      }
+    } catch (e) {
+      console.error('Apply config change failed:', e)
+    }
   }
 
-  const handleConfigChangeWithRestart = async (key: string, value: any) => {
+  const handleConfigChangeWithRestart = async (key: string, value: unknown) => {
     try {
       await patchAppConfig({ [key]: value })
       await restartCore()
@@ -290,61 +344,58 @@ const Mihomo: React.FC = () => {
       const errorMessage = e instanceof Error ? e.message : String(e)
       console.error('Core restart failed:', errorMessage)
 
-      if (errorMessage.includes('配置检查失败') || errorMessage.includes('Profile Check Failed')) {
-        await showDetailedError(t('mihomo.error.profileCheckFailed'), errorMessage)
-      } else {
-        alert(errorMessage)
-      }
+      await showError(errorMessage, t('mihomo.error.profileCheckFailed'))
     } finally {
       PubSub.publish('mihomo-core-changed')
     }
   }
-  
-  // 获取GitHub标签列表（带缓存）
+
+  // 获取 GitHub 标签列表（带缓存）
   const fetchTags = async (forceRefresh = false) => {
     setLoadingTags(true)
     try {
       const data = await fetchMihomoTags(forceRefresh)
-      setTags(data)
-    } catch (error) {
-      console.error('Failed to fetch tags:', error)
-      alert(t('mihomo.error.fetchTagsFailed'))
+      setTags(Array.isArray(data) ? data : [])
+    } catch (error: unknown) {
+      console.error('Failed to fetch tags:', String(error))
+      setTags([])
+      toast.error(t('mihomo.error.fetchTagsFailed'))
     } finally {
       setLoadingTags(false)
     }
   }
-  
+
   // 安装特定版本的核心
   const installSpecificCore = async () => {
     if (!selectedTag) return
-    
+
     setInstalling(true)
     try {
       // 下载并安装特定版本的核心
       await installSpecificMihomoCore(selectedTag)
-      
+
       // 更新应用配置
-      await patchAppConfig({ 
+      await patchAppConfig({
         core: 'mihomo-specific',
         specificVersion: selectedTag
       })
-      
+
       // 重启核心
       await restartCore()
-      
+
       // 关闭模态框
       onClose()
-      
+
       // 通知用户
       new Notification(t('mihomo.coreUpgradeSuccess'))
     } catch (error) {
       console.error('Failed to install specific core:', error)
-      alert(t('mihomo.error.installCoreFailed'))
+      toast.error(t('mihomo.error.installCoreFailed'))
     } finally {
       setInstalling(false)
     }
   }
-  
+
   // 刷新标签列表
   const refreshTags = async () => {
     setRefreshing(true)
@@ -356,7 +407,7 @@ const Mihomo: React.FC = () => {
       setRefreshing(false)
     }
   }
-  
+
   // 打开模态框时获取标签
   const handleOpenModal = async () => {
     onOpen()
@@ -364,40 +415,39 @@ const Mihomo: React.FC = () => {
     if (tags.length === 0) {
       await fetchTags(false) // 使用缓存
     }
-    
+
     // 在后台检查更新
     setTimeout(() => {
       fetchTags(true) // 强制刷新
     }, 100)
   }
-  
+
   // 过滤标签
-  const filteredTags = tags.filter(tag => 
+  const filteredTags = tags.filter((tag) =>
     tag.name.toLowerCase().includes(searchTerm.toLowerCase())
   )
-  
+
   // 当模态框打开时，确保选中当前版本
   useEffect(() => {
     if (isOpen && specificVersion) {
       setSelectedTag(specificVersion)
     }
   }, [isOpen, specificVersion])
-  
+
   return (
     <>
       {lanOpen && <InterfaceModal onClose={() => setLanOpen(false)} />}
       <BasePage title={t('mihomo.title')}>
         {/* Smart 内核设置 */}
         <SettingCard>
-          <div className={`rounded-md border p-2 transition-all duration-200 ${
-            enableSmartCore
-              ? 'border-blue-300 bg-blue-50/30 dark:border-blue-700 dark:bg-blue-950/20'
-              : 'border-gray-300 bg-gray-50/30 dark:border-gray-600 dark:bg-gray-800/20'
-          }`}>
-            <SettingItem
-              title={t('mihomo.enableSmartCore')}
-              divider
-            >
+          <div
+            className={`rounded-md border p-2 transition-all duration-200 ${
+              enableSmartCore
+                ? 'border-blue-300 bg-blue-50/30 dark:border-blue-700 dark:bg-blue-950/20'
+                : 'border-gray-300 bg-gray-50/30 dark:border-gray-600 dark:bg-gray-800/20'
+            }`}
+          >
+            <SettingItem title={t('mihomo.enableSmartCore')} divider>
               <Switch
                 size="sm"
                 isSelected={enableSmartCore}
@@ -436,7 +486,7 @@ const Mihomo: React.FC = () => {
                   color="primary"
                   onValueChange={async (v) => {
                     await patchAppConfig({ enableSmartOverride: v })
-                    await restartCore()
+                    await mihomoHotReloadConfig()
                   }}
                 />
               </SettingItem>
@@ -477,7 +527,7 @@ const Mihomo: React.FC = () => {
                         if (typeof e === 'string' && e.includes('already using latest version')) {
                           new Notification(t('mihomo.alreadyLatestVersion'))
                         } else {
-                          alert(e)
+                          toast.error(String(e))
                         }
                       } finally {
                         setUpgrading(false)
@@ -486,11 +536,7 @@ const Mihomo: React.FC = () => {
                   >
                     <IoMdCloudDownload className="text-lg" />
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="light"
-                    onPress={handleOpenModal}
-                  >
+                  <Button size="sm" variant="light" onPress={handleOpenModal}>
                     {t('mihomo.selectSpecificVersion')}
                   </Button>
                 </div>
@@ -503,16 +549,18 @@ const Mihomo: React.FC = () => {
                     ? 'data-[hover=true]:bg-blue-100 dark:data-[hover=true]:bg-blue-900/50'
                     : 'data-[hover=true]:bg-default-200'
                 }}
-                className="w-[150px]"
+                className="w-37.5"
                 size="sm"
                 aria-label={t('mihomo.selectCoreVersion')}
-                selectedKeys={new Set([
-                  core
-                ])}
+                selectedKeys={new Set([core])}
                 disallowEmptySelection={true}
                 onSelectionChange={async (v) => {
-                  const selectedCore = v.currentKey as 'mihomo' | 'mihomo-alpha' | 'mihomo-smart' | 'mihomo-specific'
-                  // 如果切换到特定版本但没有设置specificVersion，则打开选择模态框
+                  const selectedCore = v.currentKey as
+                    | 'mihomo'
+                    | 'mihomo-alpha'
+                    | 'mihomo-smart'
+                    | 'mihomo-specific'
+                  // 如果切换到特定版本但没有设置 specificVersion，则打开选择模态框
                   if (selectedCore === 'mihomo-specific' && !specificVersion) {
                     handleOpenModal()
                   } else {
@@ -553,7 +601,7 @@ const Mihomo: React.FC = () => {
                     isSelected={smartCoreUseLightGBM}
                     onValueChange={async (v) => {
                       await patchAppConfig({ smartCoreUseLightGBM: v })
-                      await restartCore()
+                      await mihomoHotReloadConfig()
                     }}
                   />
                 </SettingItem>
@@ -579,17 +627,56 @@ const Mihomo: React.FC = () => {
                     isSelected={smartCoreCollectData}
                     onValueChange={async (v) => {
                       await patchAppConfig({ smartCoreCollectData: v })
-                      await restartCore()
+                      await mihomoHotReloadConfig()
                     }}
                   />
                 </SettingItem>
 
                 <SettingItem
-                  title={t('mihomo.smartCoreStrategy')}
+                  title={
+                    <div className="flex items-center gap-2">
+                      <span>{t('mihomo.smartCollectorSize')}</span>
+                      <Tooltip
+                        content={t('mihomo.smartCollectorSizeTooltip')}
+                        placement="top"
+                        className="max-w-xs"
+                      >
+                        <IoMdInformationCircleOutline className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 cursor-help" />
+                      </Tooltip>
+                    </div>
+                  }
+                  divider
                 >
+                  <div className="flex items-center gap-2">
+                    <Input
+                      size="sm"
+                      className="w-25"
+                      type="number"
+                      value={smartCollectorSize.toString()}
+                      onValueChange={async (v: string) => {
+                        const num = parseInt(v)
+                        if (!isNaN(num)) {
+                          await patchAppConfig({ smartCollectorSize: num })
+                        }
+                      }}
+                      onBlur={async (e) => {
+                        let num = parseInt(e.target.value)
+                        if (isNaN(num)) num = 100
+                        if (num < 1) num = 1
+                        await patchAppConfig({ smartCollectorSize: num })
+                        await mihomoHotReloadConfig()
+                      }}
+                    />
+                    <span className="text-default-500">MB</span>
+                  </div>
+                </SettingItem>
+
+                <SettingItem title={t('mihomo.smartCoreStrategy')}>
                   <Select
-                    classNames={{ trigger: 'data-[hover=true]:bg-blue-100 dark:data-[hover=true]:bg-blue-900/50' }}
-                    className="w-[150px]"
+                    classNames={{
+                      trigger: 'data-[hover=true]:bg-blue-100 dark:data-[hover=true]:bg-blue-900/50'
+                    }}
+                    className="w-37.5"
                     size="sm"
                     aria-label={t('mihomo.smartCoreStrategy')}
                     selectedKeys={new Set([smartCoreStrategy])}
@@ -597,11 +684,15 @@ const Mihomo: React.FC = () => {
                     onSelectionChange={async (v) => {
                       const strategy = v.currentKey as 'sticky-sessions' | 'round-robin'
                       await patchAppConfig({ smartCoreStrategy: strategy })
-                      await restartCore()
+                      await mihomoHotReloadConfig()
                     }}
                   >
-                    <SelectItem key="sticky-sessions">{t('mihomo.smartCoreStrategyStickySession')}</SelectItem>
-                    <SelectItem key="round-robin">{t('mihomo.smartCoreStrategyRoundRobin')}</SelectItem>
+                    <SelectItem key="sticky-sessions">
+                      {t('mihomo.smartCoreStrategyStickySession')}
+                    </SelectItem>
+                    <SelectItem key="round-robin">
+                      {t('mihomo.smartCoreStrategyRoundRobin')}
+                    </SelectItem>
                   </Select>
                 </SettingItem>
               </>
@@ -613,7 +704,7 @@ const Mihomo: React.FC = () => {
         <SettingCard>
           <SettingItem title={t('mihomo.mixedPort')} divider>
             <div className="flex">
-              {mixedPortInput !== mixedPort && (
+              {isManualPortChange && mixedPortInput !== mixedPort && (
                 <Button
                   size="sm"
                   color="primary"
@@ -633,25 +724,58 @@ const Mihomo: React.FC = () => {
               <Input
                 size="sm"
                 type="number"
-                className="w-[100px]"
-                value={mixedPortInput.toString()}
+                className="w-25"
+                value={(showMixedPort ?? mixedPort ?? '').toString()}
                 max={65535}
                 min={0}
                 onValueChange={(v) => {
-                  setMixedPortInput(parseInt(v))
+                  const port = v === '' ? 0 : parseInt(v)
+                  if (!isNaN(port) && port >= 0 && port <= 65535) {
+                    setMixedPortInput(port)
+                    patchAppConfig({ showMixedPort: port })
+                    setIsManualPortChange(true)
+                  }
+                }}
+              />
+              <Button
+                isIconOnly
+                size="sm"
+                variant="light"
+                className="ml-2"
+                onPress={() => {
+                  const randomPort = generateRandomPort()
+                  setMixedPortInput(randomPort)
+                  patchAppConfig({ showMixedPort: randomPort })
+                  setIsManualPortChange(true)
+                }}
+              >
+                <IoMdShuffle className="text-lg" />
+              </Button>
+              <Switch
+                size="sm"
+                className="ml-2"
+                isSelected={enableMixedPort}
+                onValueChange={(value) => {
+                  patchAppConfig({ enableMixedPort: value })
+                  if (value) {
+                    const port = appConfig?.showMixedPort
+                    onChangeNeedRestart({ 'mixed-port': port })
+                  } else {
+                    onChangeNeedRestart({ 'mixed-port': 0 })
+                  }
                 }}
               />
             </div>
           </SettingItem>
           <SettingItem title={t('mihomo.socksPort')} divider>
             <div className="flex">
-              {socksPortInput !== socksPort && (
+              {isManualPortChange && socksPortInput !== socksPort && (
                 <Button
                   size="sm"
                   color="primary"
                   className="mr-2"
-                  onPress={() => {
-                    onChangeNeedRestart({ 'socks-port': socksPortInput })
+                  onPress={async () => {
+                    await onChangeNeedRestart({ 'socks-port': socksPortInput })
                   }}
                 >
                   {t('mihomo.confirm')}
@@ -661,25 +785,58 @@ const Mihomo: React.FC = () => {
               <Input
                 size="sm"
                 type="number"
-                className="w-[100px]"
-                value={socksPortInput.toString()}
+                className="w-25"
+                value={(showSocksPort ?? socksPort ?? '').toString()}
                 max={65535}
                 min={0}
                 onValueChange={(v) => {
-                  setSocksPortInput(parseInt(v))
+                  const port = v === '' ? 0 : parseInt(v)
+                  if (!isNaN(port) && port >= 0 && port <= 65535) {
+                    setSocksPortInput(port)
+                    patchAppConfig({ showSocksPort: port })
+                    setIsManualPortChange(true)
+                  }
+                }}
+              />
+              <Button
+                isIconOnly
+                size="sm"
+                variant="light"
+                className="ml-2"
+                onPress={() => {
+                  const randomPort = generateRandomPort()
+                  setSocksPortInput(randomPort)
+                  patchAppConfig({ showSocksPort: randomPort })
+                  setIsManualPortChange(true)
+                }}
+              >
+                <IoMdShuffle className="text-lg" />
+              </Button>
+              <Switch
+                size="sm"
+                className="ml-2"
+                isSelected={enableSocksPort}
+                onValueChange={(value) => {
+                  patchAppConfig({ enableSocksPort: value })
+                  if (value) {
+                    const port = appConfig?.showSocksPort ?? socksPort
+                    onChangeNeedRestart({ 'socks-port': port })
+                  } else {
+                    onChangeNeedRestart({ 'socks-port': 0 })
+                  }
                 }}
               />
             </div>
           </SettingItem>
           <SettingItem title={t('mihomo.httpPort')} divider>
             <div className="flex">
-              {httpPortInput !== httpPort && (
+              {isManualPortChange && httpPortInput !== httpPort && (
                 <Button
                   size="sm"
                   color="primary"
                   className="mr-2"
-                  onPress={() => {
-                    onChangeNeedRestart({ port: httpPortInput })
+                  onPress={async () => {
+                    await onChangeNeedRestart({ port: httpPortInput })
                   }}
                 >
                   {t('mihomo.confirm')}
@@ -689,12 +846,45 @@ const Mihomo: React.FC = () => {
               <Input
                 size="sm"
                 type="number"
-                className="w-[100px]"
-                value={httpPortInput.toString()}
+                className="w-25"
+                value={(showHttpPort ?? httpPort ?? '').toString()}
                 max={65535}
                 min={0}
                 onValueChange={(v) => {
-                  setHttpPortInput(parseInt(v))
+                  const port = v === '' ? 0 : parseInt(v)
+                  if (!isNaN(port) && port >= 0 && port <= 65535) {
+                    setHttpPortInput(port)
+                    patchAppConfig({ showHttpPort: port })
+                    setIsManualPortChange(true)
+                  }
+                }}
+              />
+              <Button
+                isIconOnly
+                size="sm"
+                variant="light"
+                className="ml-2"
+                onPress={() => {
+                  const randomPort = generateRandomPort()
+                  setHttpPortInput(randomPort)
+                  patchAppConfig({ showHttpPort: randomPort })
+                  setIsManualPortChange(true)
+                }}
+              >
+                <IoMdShuffle className="text-lg" />
+              </Button>
+              <Switch
+                size="sm"
+                className="ml-2"
+                isSelected={enableHttpPort}
+                onValueChange={(value) => {
+                  patchAppConfig({ enableHttpPort: value })
+                  if (value) {
+                    const port = appConfig?.showHttpPort ?? httpPort
+                    onChangeNeedRestart({ port: port })
+                  } else {
+                    onChangeNeedRestart({ port: 0 })
+                  }
                 }}
               />
             </div>
@@ -702,13 +892,13 @@ const Mihomo: React.FC = () => {
           {platform !== 'win32' && (
             <SettingItem title={t('mihomo.redirPort')} divider>
               <div className="flex">
-                {redirPortInput !== redirPort && (
+                {isManualPortChange && redirPortInput !== redirPort && (
                   <Button
                     size="sm"
                     color="primary"
                     className="mr-2"
-                    onPress={() => {
-                      onChangeNeedRestart({ 'redir-port': redirPortInput })
+                    onPress={async () => {
+                      await onChangeNeedRestart({ 'redir-port': redirPortInput })
                     }}
                   >
                     {t('mihomo.confirm')}
@@ -718,12 +908,45 @@ const Mihomo: React.FC = () => {
                 <Input
                   size="sm"
                   type="number"
-                  className="w-[100px]"
-                  value={redirPortInput.toString()}
+                  className="w-25"
+                  value={(showRedirPort ?? redirPort ?? '').toString()}
                   max={65535}
                   min={0}
                   onValueChange={(v) => {
-                    setRedirPortInput(parseInt(v))
+                    const port = v === '' ? 0 : parseInt(v)
+                    if (!isNaN(port) && port >= 0 && port <= 65535) {
+                      setRedirPortInput(port)
+                      patchAppConfig({ showRedirPort: port })
+                      setIsManualPortChange(true)
+                    }
+                  }}
+                />
+                <Button
+                  isIconOnly
+                  size="sm"
+                  variant="light"
+                  className="ml-2"
+                  onPress={() => {
+                    const randomPort = generateRandomPort()
+                    setRedirPortInput(randomPort)
+                    patchAppConfig({ showRedirPort: randomPort })
+                    setIsManualPortChange(true)
+                  }}
+                >
+                  <IoMdShuffle className="text-lg" />
+                </Button>
+                <Switch
+                  size="sm"
+                  className="ml-2"
+                  isSelected={enableRedirPort}
+                  onValueChange={(value) => {
+                    patchAppConfig({ enableRedirPort: value })
+                    if (value) {
+                      const port = appConfig?.showRedirPort ?? redirPort
+                      onChangeNeedRestart({ 'redir-port': port })
+                    } else {
+                      onChangeNeedRestart({ 'redir-port': 0 })
+                    }
                   }}
                 />
               </div>
@@ -732,13 +955,13 @@ const Mihomo: React.FC = () => {
           {platform === 'linux' && (
             <SettingItem title={t('mihomo.tproxyPort')} divider>
               <div className="flex">
-                {tproxyPortInput !== tproxyPort && (
+                {isManualPortChange && tproxyPortInput !== tproxyPort && (
                   <Button
                     size="sm"
                     color="primary"
                     className="mr-2"
-                    onPress={() => {
-                      onChangeNeedRestart({ 'tproxy-port': tproxyPortInput })
+                    onPress={async () => {
+                      await onChangeNeedRestart({ 'tproxy-port': tproxyPortInput })
                     }}
                   >
                     {t('mihomo.confirm')}
@@ -748,12 +971,45 @@ const Mihomo: React.FC = () => {
                 <Input
                   size="sm"
                   type="number"
-                  className="w-[100px]"
-                  value={tproxyPortInput.toString()}
+                  className="w-25"
+                  value={(showTproxyPort ?? tproxyPort ?? '').toString()}
                   max={65535}
                   min={0}
                   onValueChange={(v) => {
-                    setTproxyPortInput(parseInt(v))
+                    const port = v === '' ? 0 : parseInt(v)
+                    if (!isNaN(port) && port >= 0 && port <= 65535) {
+                      setTproxyPortInput(port)
+                      patchAppConfig({ showTproxyPort: port })
+                      setIsManualPortChange(true)
+                    }
+                  }}
+                />
+                <Button
+                  isIconOnly
+                  size="sm"
+                  variant="light"
+                  className="ml-2"
+                  onPress={() => {
+                    const randomPort = generateRandomPort()
+                    setTproxyPortInput(randomPort)
+                    patchAppConfig({ showTproxyPort: randomPort })
+                    setIsManualPortChange(true)
+                  }}
+                >
+                  <IoMdShuffle className="text-lg" />
+                </Button>
+                <Switch
+                  size="sm"
+                  className="ml-2"
+                  isSelected={enableTproxyPort}
+                  onValueChange={(value) => {
+                    patchAppConfig({ enableTproxyPort: value })
+                    if (value) {
+                      const port = appConfig?.showTproxyPort ?? tproxyPort
+                      onChangeNeedRestart({ 'tproxy-port': port })
+                    } else {
+                      onChangeNeedRestart({ 'tproxy-port': 0 })
+                    }
                   }}
                 />
               </div>
@@ -761,11 +1017,12 @@ const Mihomo: React.FC = () => {
           )}
           <SettingItem title={t('mihomo.externalController')} divider>
             <div className="flex">
-              {externalControllerInput !== externalController && (
+              {externalControllerInput !== externalController && !externalControllerError && (
                 <Button
                   size="sm"
                   color="primary"
                   className="mr-2"
+                  isDisabled={!!externalControllerError}
                   onPress={() => {
                     onChangeNeedRestart({
                       'external-controller': externalControllerInput
@@ -776,17 +1033,51 @@ const Mihomo: React.FC = () => {
                 </Button>
               )}
 
-              <Input
-                size="sm"
-                className="w-[200px]"
-                value={externalControllerInput}
-                onValueChange={(v) => {
-                  setExternalControllerInput(v)
-                }}
-              />
+              <Tooltip
+                content={externalControllerError}
+                placement="right"
+                isOpen={!!externalControllerError}
+                showArrow={true}
+                color="danger"
+                offset={10}
+              >
+                <Input
+                  size="sm"
+                  className={`w-50 ${externalControllerError ? 'border-red-500 ring-1 ring-red-500 rounded-lg' : ''}`}
+                  value={externalControllerInput}
+                  onValueChange={(v) => {
+                    setExternalControllerInput(v)
+                    const result = isValidListenAddress(v)
+                    setExternalControllerError(
+                      isValid(result) ? null : (getError(result) ?? '格式错误')
+                    )
+                  }}
+                />
+              </Tooltip>
             </div>
           </SettingItem>
-          <SettingItem title={t('mihomo.externalControllerSecret')} divider>
+          <SettingItem
+            title={t('mihomo.externalControllerSecret')}
+            actions={
+              <Button
+                size="sm"
+                isIconOnly
+                title={t('common.generateSecret')}
+                variant="light"
+                onPress={() => {
+                  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+                  const randomSecret = Array.from(
+                    { length: 8 },
+                    () => chars[Math.floor(Math.random() * chars.length)]
+                  ).join('')
+                  setSecretInput(randomSecret)
+                }}
+              >
+                <IoMdRefresh className="text-lg" />
+              </Button>
+            }
+            divider
+          >
             <div className="flex">
               {secretInput !== secret && (
                 <Button
@@ -803,20 +1094,33 @@ const Mihomo: React.FC = () => {
 
               <Input
                 size="sm"
-                type="password"
-                className="w-[200px]"
+                type={isSecretVisible ? 'text' : 'password'}
+                className="w-50"
                 value={secretInput}
                 onValueChange={(v) => {
                   setSecretInput(v)
                 }}
+                startContent={
+                  <button
+                    type="button"
+                    onClick={() => setIsSecretVisible((prev) => !prev)}
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    {isSecretVisible ? (
+                      <IoMdEyeOff className="w-4 h-4" />
+                    ) : (
+                      <IoMdEye className="w-4 h-4" />
+                    )}
+                  </button>
+                }
               />
             </div>
           </SettingItem>
           <SettingItem title={t('settings.webui.title')} divider>
             <div className="flex gap-2">
-              <Button 
-                size="sm" 
-                color="primary" 
+              <Button
+                size="sm"
+                color="primary"
                 isDisabled={!externalController || externalController.trim() === ''}
                 onPress={() => setIsWebUIModalOpen(true)}
               >
@@ -860,7 +1164,7 @@ const Mihomo: React.FC = () => {
           {allowLan && (
             <>
               <SettingItem title={t('mihomo.allowedIpSegments')}>
-                {lanAllowedIpsInput.join('') !== lanAllowedIps.join('') && (
+                {JSON.stringify(lanAllowedIpsInput) !== JSON.stringify(lanAllowedIps) && (
                   <Button
                     size="sm"
                     color="primary"
@@ -910,7 +1214,7 @@ const Mihomo: React.FC = () => {
               </div>
               <Divider className="mb-2" />
               <SettingItem title={t('mihomo.disallowedIpSegments')}>
-                {lanDisallowedIpsInput.join('') !== lanDisallowedIps.join('') && (
+                {JSON.stringify(lanDisallowedIpsInput) !== JSON.stringify(lanDisallowedIps) && (
                   <Button
                     size="sm"
                     color="primary"
@@ -929,7 +1233,7 @@ const Mihomo: React.FC = () => {
                       <Input
                         size="sm"
                         fullWidth
-                        placeholder={t('mihomo.username.placeholder')}
+                        placeholder={t('mihomo.ipSegment.placeholder')}
                         value={ipcidr || ''}
                         onValueChange={(v) => {
                           if (index === lanDisallowedIpsInput.length) {
@@ -964,7 +1268,7 @@ const Mihomo: React.FC = () => {
             </>
           )}
           <SettingItem title={t('mihomo.userVerification')}>
-            {authenticationInput.join('') !== authentication.join('') && (
+            {JSON.stringify(authenticationInput) !== JSON.stringify(authentication) && (
               <Button
                 size="sm"
                 color="primary"
@@ -1039,7 +1343,7 @@ const Mihomo: React.FC = () => {
           </div>
           <Divider className="mb-2" />
           <SettingItem title={t('mihomo.skipAuthPrefixes')}>
-            {skipAuthPrefixesInput.join('') !== skipAuthPrefixes.join('') && (
+            {JSON.stringify(skipAuthPrefixesInput) !== JSON.stringify(skipAuthPrefixes) && (
               <Button
                 size="sm"
                 color="primary"
@@ -1132,17 +1436,40 @@ const Mihomo: React.FC = () => {
             <Input
               size="sm"
               type="number"
-              className="w-[100px]"
+              className="w-25"
               value={maxLogDays.toString()}
               onValueChange={(v) => {
-                patchAppConfig({ maxLogDays: parseInt(v) })
+                const num = parseInt(v)
+                if (!isNaN(num)) {
+                  patchAppConfig({ maxLogDays: num })
+                }
+              }}
+            />
+          </SettingItem>
+          <SettingItem title={t('mihomo.logFileSizeLimit')} divider>
+            <Input
+              size="sm"
+              type="number"
+              className="w-25"
+              value={maxLogFileSize.toString()}
+              onValueChange={(v) => {
+                const num = parseInt(v)
+                if (!isNaN(num)) {
+                  patchAppConfig({ maxLogFileSize: num })
+                }
+              }}
+              onBlur={(e) => {
+                const num = parseInt(e.target.value)
+                if (isNaN(num) || num < 1) {
+                  patchAppConfig({ maxLogFileSize: 1 })
+                }
               }}
             />
           </SettingItem>
           <SettingItem title={t('mihomo.logLevel')} divider>
             <Select
               classNames={{ trigger: 'data-[hover=true]:bg-default-200' }}
-              className="w-[100px]"
+              className="w-25"
               size="sm"
               aria-label={t('mihomo.selectLogLevel')}
               selectedKeys={new Set([logLevel])}
@@ -1158,10 +1485,10 @@ const Mihomo: React.FC = () => {
               <SelectItem key="debug">{t('mihomo.debug')}</SelectItem>
             </Select>
           </SettingItem>
-          <SettingItem title={t('mihomo.findProcess')} divider>
+          <SettingItem title={t('mihomo.findProcess')}>
             <Select
               classNames={{ trigger: 'data-[hover=true]:bg-default-200' }}
-              className="w-[100px]"
+              className="w-25"
               size="sm"
               aria-label={t('mihomo.selectFindProcessMode')}
               selectedKeys={new Set([findProcessMode])}
@@ -1177,10 +1504,10 @@ const Mihomo: React.FC = () => {
           </SettingItem>
         </SettingCard>
       </BasePage>
-      
+
       {/* WebUI 管理模态框 */}
-      <Modal 
-        isOpen={isWebUIModalOpen} 
+      <Modal
+        isOpen={isWebUIModalOpen}
         onOpenChange={setIsWebUIModalOpen}
         size="5xl"
         scrollBehavior="inside"
@@ -1189,13 +1516,11 @@ const Mihomo: React.FC = () => {
         hideCloseButton
       >
         <ModalContent className="h-full w-[calc(100%-100px)]">
-          <ModalHeader className="flex pb-0 app-drag">
-            {t('settings.webui.manage')}
-          </ModalHeader>
+          <ModalHeader className="flex pb-0 app-drag">{t('settings.webui.manage')}</ModalHeader>
           <ModalBody className="flex flex-col h-full">
             <div className="flex flex-col h-full">
               {/* 添加/编辑面板表单 */}
-              <div className="flex flex-col gap-2 p-3 bg-default-100 rounded-lg flex-shrink-0">
+              <div className="flex flex-col gap-2 p-3 bg-default-100 rounded-lg shrink-0">
                 <Input
                   label={t('settings.webui.panelName')}
                   placeholder={t('settings.webui.panelNamePlaceholder')}
@@ -1218,26 +1543,21 @@ const Mihomo: React.FC = () => {
                 <div className="flex gap-2">
                   {editingPanel ? (
                     <>
-                      <Button 
-                        size="sm" 
+                      <Button
+                        size="sm"
                         color="primary"
                         onPress={updatePanel}
                         isDisabled={!newPanelName || !newPanelUrl}
                       >
                         {t('common.save')}
                       </Button>
-                      <Button 
-                        size="sm" 
-                        color="default"
-                        variant="bordered"
-                        onPress={cancelEditing}
-                      >
+                      <Button size="sm" color="default" variant="bordered" onPress={cancelEditing}>
                         {t('common.cancel')}
                       </Button>
                     </>
                   ) : (
-                    <Button 
-                      size="sm" 
+                    <Button
+                      size="sm"
                       color="primary"
                       onPress={addNewPanel}
                       isDisabled={!newPanelName || !newPanelUrl}
@@ -1245,8 +1565,8 @@ const Mihomo: React.FC = () => {
                       {t('settings.webui.addPanel')}
                     </Button>
                   )}
-                  <Button 
-                    size="sm" 
+                  <Button
+                    size="sm"
                     color="warning"
                     variant="bordered"
                     onPress={restoreDefaultPanels}
@@ -1255,36 +1575,34 @@ const Mihomo: React.FC = () => {
                   </Button>
                 </div>
               </div>
-              
+
               {/* 面板列表 */}
-              <div className="flex flex-col gap-2 mt-2 overflow-y-auto flex-grow">
+              <div className="flex flex-col gap-2 mt-2 overflow-y-auto grow">
                 <h3 className="text-lg font-semibold">{t('settings.webui.panels')}</h3>
-                {allPanels.map(panel => (
-                  <div key={panel.id} className="flex items-start justify-between p-3 bg-default-50 rounded-lg flex-shrink-0">
+                {allPanels.map((panel) => (
+                  <div
+                    key={panel.id}
+                    className="flex items-start justify-between p-3 bg-default-50 rounded-lg shrink-0"
+                  >
                     <div className="flex-1 mr-2">
                       <p className="font-medium">{panel.name}</p>
                       <HighlightedUrl url={panel.url} />
                     </div>
                     <div className="flex gap-2">
-                      <Button 
-                        isIconOnly 
-                        size="sm" 
-                        color="primary"
-                        onPress={() => openWebUI(panel)}
-                      >
+                      <Button isIconOnly size="sm" color="primary" onPress={() => openWebUI(panel)}>
                         <MdOpenInNew />
                       </Button>
-                      <Button 
-                        isIconOnly 
-                        size="sm" 
+                      <Button
+                        isIconOnly
+                        size="sm"
                         color="warning"
                         onPress={() => startEditing(panel)}
                       >
                         <MdEdit />
                       </Button>
-                      <Button 
-                        isIconOnly 
-                        size="sm" 
+                      <Button
+                        isIconOnly
+                        size="sm"
                         color="danger"
                         onPress={() => deletePanel(panel.id)}
                       >
@@ -1297,20 +1615,17 @@ const Mihomo: React.FC = () => {
             </div>
           </ModalBody>
           <ModalFooter className="pt-0">
-            <Button 
-              color="primary" 
-              onPress={() => setIsWebUIModalOpen(false)}
-            >
+            <Button color="primary" onPress={() => setIsWebUIModalOpen(false)}>
               {t('common.close')}
             </Button>
           </ModalFooter>
         </ModalContent>
       </Modal>
-      
+
       {/* 自定义版本选择模态框 */}
-      <Modal 
-        isOpen={isOpen} 
-        onClose={onClose} 
+      <Modal
+        isOpen={isOpen}
+        onClose={onClose}
         size="5xl"
         backdrop="blur"
         classNames={{ backdrop: 'top-[48px]' }}

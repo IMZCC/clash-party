@@ -1,15 +1,15 @@
+import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { BrowserWindow, ipcMain } from 'electron'
 import windowStateKeeper from 'electron-window-state'
-import { join } from 'path'
 import { getAppConfig, patchAppConfig } from '../config'
+import { floatingWindowLogger } from '../utils/logger'
 import { applyTheme } from './theme'
 import { buildContextMenu, showTrayIcon } from './tray'
-import { floatingWindowLogger } from '../utils/logger'
 
 export let floatingWindow: BrowserWindow | null = null
 
-function logError(message: string, error?: any): void {
+function logError(message: string, error?: unknown): void {
   floatingWindowLogger.log(`FloatingWindow Error: ${message}`, error).catch(() => {})
 }
 
@@ -19,12 +19,11 @@ async function createFloatingWindow(): Promise<void> {
     const { customTheme = 'default.css', floatingWindowCompatMode = true } = await getAppConfig()
 
     const safeMode = process.env.FLOATING_SAFE_MODE === 'true'
-    const useCompatMode = floatingWindowCompatMode ||
-                         process.env.FLOATING_COMPAT_MODE === 'true' ||
-                         safeMode
+    const useCompatMode =
+      floatingWindowCompatMode || process.env.FLOATING_COMPAT_MODE === 'true' || safeMode
 
     const windowOptions: Electron.BrowserWindowConstructorOptions = {
-      width: 120,
+      width: 135,
       height: 42,
       x: floatingWindowState.x,
       y: floatingWindowState.y,
@@ -38,9 +37,9 @@ async function createFloatingWindow(): Promise<void> {
       maximizable: safeMode,
       fullscreenable: false,
       closable: safeMode,
-      backgroundColor: safeMode ? '#ffffff' : (useCompatMode ? '#f0f0f0' : '#00000000'),
+      backgroundColor: safeMode ? '#ffffff' : useCompatMode ? '#f0f0f0' : '#00000000',
       webPreferences: {
-        preload: join(__dirname, '../preload/index.js'),
+        preload: join(__dirname, '../preload/index.cjs'),
         spellcheck: false,
         sandbox: false,
         nodeIntegration: false,
@@ -50,7 +49,9 @@ async function createFloatingWindow(): Promise<void> {
 
     if (process.platform === 'win32') {
       windowOptions.hasShadow = !safeMode
-      windowOptions.webPreferences!.offscreen = false
+      if (windowOptions.webPreferences) {
+        windowOptions.webPreferences.offscreen = false
+      }
     }
 
     floatingWindow = new BrowserWindow(windowOptions)
@@ -69,10 +70,13 @@ async function createFloatingWindow(): Promise<void> {
     })
 
     floatingWindow.on('moved', () => {
-      floatingWindow && floatingWindowState.saveState(floatingWindow)
+      if (floatingWindow) {
+        floatingWindowState.saveState(floatingWindow)
+      }
     })
 
     // IPC 监听器
+    ipcMain.removeAllListeners('updateFloatingWindow')
     ipcMain.on('updateFloatingWindow', () => {
       if (floatingWindow) {
         floatingWindow.webContents.send('controledMihomoConfigUpdated')
@@ -81,9 +85,10 @@ async function createFloatingWindow(): Promise<void> {
     })
 
     // 加载页面
-    const url = is.dev && process.env['ELECTRON_RENDERER_URL']
-      ? `${process.env['ELECTRON_RENDERER_URL']}/floating.html`
-      : join(__dirname, '../renderer/floating.html')
+    const url =
+      is.dev && process.env['ELECTRON_RENDERER_URL']
+        ? `${process.env['ELECTRON_RENDERER_URL']}/floating.html`
+        : join(__dirname, '../renderer/floating.html')
 
     is.dev ? await floatingWindow.loadURL(url) : await floatingWindow.loadFile(url)
   } catch (error) {
@@ -126,7 +131,7 @@ export async function triggerFloatingWindow(): Promise<void> {
 
 export async function closeFloatingWindow(): Promise<void> {
   if (floatingWindow) {
-    floatingWindow.close()
+    ipcMain.removeAllListeners('updateFloatingWindow')
     floatingWindow.destroy()
     floatingWindow = null
   }

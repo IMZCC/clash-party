@@ -3,7 +3,7 @@ import { useControledMihomoConfig } from '@renderer/hooks/use-controled-mihomo-c
 import BorderSwitch from '@renderer/components/base/border-swtich'
 import { TbDeviceIpadHorizontalBolt } from 'react-icons/tb'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { restartCore, updateTrayIcon, updateTrayIconImmediate } from '@renderer/utils/ipc'
+import { updateTrayIconImmediate } from '@renderer/utils/ipc'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import React from 'react'
@@ -42,7 +42,9 @@ const TunSwitcher: React.FC<Props> = (props) => {
     if (enable) {
       try {
         // 检查内核权限
-        const hasPermissions = await window.electron.ipcRenderer.invoke('checkMihomoCorePermissions')
+        const hasPermissions = await window.electron.ipcRenderer.invoke(
+          'checkMihomoCorePermissions'
+        )
 
         if (!hasPermissions) {
           if (window.electron.process.platform === 'win32') {
@@ -55,7 +57,11 @@ const TunSwitcher: React.FC<Props> = (props) => {
                 return
               } catch (error) {
                 console.error('Failed to restart as admin:', error)
-                await window.electron.ipcRenderer.invoke('showErrorDialog', t('tun.permissions.failed'), String(error))
+                await window.electron.ipcRenderer.invoke(
+                  'showErrorDialog',
+                  t('tun.permissions.failed'),
+                  String(error)
+                )
                 updateTrayIconImmediate(sysProxyEnabled, false)
                 return
               }
@@ -69,7 +75,11 @@ const TunSwitcher: React.FC<Props> = (props) => {
               await window.electron.ipcRenderer.invoke('requestTunPermissions')
             } catch (error) {
               console.warn('Permission grant failed:', error)
-              await window.electron.ipcRenderer.invoke('showErrorDialog', t('tun.permissions.failed'), String(error))
+              await window.electron.ipcRenderer.invoke(
+                'showErrorDialog',
+                t('tun.permissions.failed'),
+                String(error)
+              )
               updateTrayIconImmediate(sysProxyEnabled, false)
               return
             }
@@ -80,16 +90,17 @@ const TunSwitcher: React.FC<Props> = (props) => {
       }
 
       await patchControledMihomoConfig({ tun: { enable }, dns: { enable: true } })
-      if (enable && appConfig?.silentStart) {
-        await window.electron.ipcRenderer.invoke('enableAutoRun')
+      if (enable) {
+        const autoRunEnabled = await window.electron.ipcRenderer.invoke('checkAutoRun')
+        if (autoRunEnabled) {
+          await window.electron.ipcRenderer.invoke('enableAutoRun')
+        }
       }
     } else {
       await patchControledMihomoConfig({ tun: { enable } })
     }
-    await restartCore()
     window.electron.ipcRenderer.send('updateFloatingWindow')
     window.electron.ipcRenderer.send('updateTrayMenu')
-    await updateTrayIcon()
   }
 
   if (iconOnly) {
@@ -127,7 +138,7 @@ const TunSwitcher: React.FC<Props> = (props) => {
         ref={setNodeRef}
         {...attributes}
         {...listeners}
-        className={`${match ? 'bg-primary' : 'hover:bg-primary/30'} ${isDragging ? `${disableAnimations ? '' : 'scale-[0.95] tap-highlight-transparent'}` : ''}`}
+        className={`${match ? 'bg-primary' : 'hover:bg-primary/30'} ${disableAnimations ? '' : `motion-reduce:transition-transform-background ${isDragging ? 'scale-[0.95] tap-highlight-transparent' : ''}`}`}
       >
         <CardBody className="pb-1 pt-0 px-0">
           <div className="flex justify-between">

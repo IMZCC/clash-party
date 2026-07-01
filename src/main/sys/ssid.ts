@@ -1,10 +1,11 @@
 import { exec } from 'child_process'
 import { promisify } from 'util'
-import { getAppConfig, patchControledMihomoConfig } from '../config'
-import { patchMihomoConfig } from '../core/mihomoApi'
-import { mainWindow } from '..'
 import { ipcMain, net } from 'electron'
+import { getAppConfig, patchAppConfig, patchControledMihomoConfig } from '../config'
+import { patchMihomoConfig } from '../core/mihomoApi'
+import { mainWindow } from '../window'
 import { getDefaultDevice } from '../core/manager'
+import { updateTrayIcon } from '../resolve/tray'
 
 export async function getCurrentSSID(): Promise<string | undefined> {
   if (process.platform === 'win32') {
@@ -32,23 +33,34 @@ export async function getCurrentSSID(): Promise<string | undefined> {
 }
 
 let lastSSID: string | undefined
+let ssidCheckInterval: NodeJS.Timeout | null = null
+
 export async function checkSSID(): Promise<void> {
   try {
-    const { pauseSSID = [] } = await getAppConfig()
+    const { pauseSSID = [], disableDnsOnPauseSSID = false, controlDns } = await getAppConfig()
     if (pauseSSID.length === 0) return
     const currentSSID = await getCurrentSSID()
     if (currentSSID === lastSSID) return
     lastSSID = currentSSID
     if (currentSSID && pauseSSID.includes(currentSSID)) {
+      if (disableDnsOnPauseSSID) {
+        // 保存当前 DNS 状态到 appConfig，然后关闭 DNS 接管
+        await patchAppConfig({ controlDnsBeforePause: controlDns, controlDns: false })
+      }
       await patchControledMihomoConfig({ mode: 'direct' })
       await patchMihomoConfig({ mode: 'direct' })
       mainWindow?.webContents.send('controledMihomoConfigUpdated')
+      mainWindow?.webContents.send('appConfigUpdated')
       ipcMain.emit('updateTrayMenu')
+      await updateTrayIcon()
     } else {
+      // DNS 恢复逻辑已移至 patchControledMihomoConfig，会在模式从 direct 切换到 rule/global 时自动触发
       await patchControledMihomoConfig({ mode: 'rule' })
       await patchMihomoConfig({ mode: 'rule' })
       mainWindow?.webContents.send('controledMihomoConfigUpdated')
+      mainWindow?.webContents.send('appConfigUpdated')
       ipcMain.emit('updateTrayMenu')
+      await updateTrayIcon()
     }
   } catch {
     // ignore
@@ -56,8 +68,18 @@ export async function checkSSID(): Promise<void> {
 }
 
 export async function startSSIDCheck(): Promise<void> {
+  if (ssidCheckInterval) {
+    clearInterval(ssidCheckInterval)
+  }
   await checkSSID()
-  setInterval(checkSSID, 30000)
+  ssidCheckInterval = setInterval(checkSSID, 30000)
+}
+
+export function stopSSIDCheck(): void {
+  if (ssidCheckInterval) {
+    clearInterval(ssidCheckInterval)
+    ssidCheckInterval = null
+  }
 }
 
 async function getSSIDByAirport(): Promise<string | undefined> {

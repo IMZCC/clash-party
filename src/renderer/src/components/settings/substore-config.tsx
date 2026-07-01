@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import SettingCard from '@renderer/components/base/base-setting-card'
+import { toast } from '@renderer/components/base/toast'
 import SettingItem from '@renderer/components/base/base-setting-item'
 import { Button, Input, Switch } from '@heroui/react'
 import {
@@ -12,12 +13,13 @@ import { useAppConfig } from '@renderer/hooks/use-app-config'
 import debounce from '@renderer/utils/debounce'
 import { isValidCron } from 'cron-validator'
 import { useTranslation } from 'react-i18next'
+import { DEFAULT_USE_SUB_STORE } from '../../../../shared/appConfig'
 
 const SubStoreConfig: React.FC = () => {
   const { t } = useTranslation()
   const { appConfig, patchAppConfig } = useAppConfig()
   const {
-    useSubStore = true,
+    useSubStore = DEFAULT_USE_SUB_STORE,
     useCustomSubStore = false,
     useProxyInSubStore = false,
     subStoreHost = '127.0.0.1',
@@ -55,7 +57,7 @@ const SubStoreConfig: React.FC = () => {
                 await stopSubStoreBackendServer()
               }
             } catch (e) {
-              alert(e)
+              toast.error(String(e))
             }
           }}
         />
@@ -76,7 +78,7 @@ const SubStoreConfig: React.FC = () => {
                   await startSubStoreFrontendServer()
                   await startSubStoreBackendServer()
                 } catch (e) {
-                  alert(e)
+                  toast.error(String(e))
                 }
               }}
             />
@@ -94,7 +96,7 @@ const SubStoreConfig: React.FC = () => {
                     await startSubStoreBackendServer()
                   }
                 } catch (e) {
-                  alert(e)
+                  toast.error(String(e))
                 }
               }}
             />
@@ -123,7 +125,7 @@ const SubStoreConfig: React.FC = () => {
                       await patchAppConfig({ useProxyInSubStore: v })
                       await startSubStoreBackendServer()
                     } catch (e) {
-                      alert(e)
+                      toast.error(String(e))
                     }
                   }}
                 />
@@ -144,7 +146,7 @@ const SubStoreConfig: React.FC = () => {
                           })
                           new Notification(t('common.notification.restartRequired'))
                         } else {
-                          alert(t('common.error.invalidCron'))
+                          toast.warning(t('common.error.invalidCron'))
                         }
                       }}
                     >
@@ -177,7 +179,7 @@ const SubStoreConfig: React.FC = () => {
                           })
                           new Notification(t('common.notification.restartRequired'))
                         } else {
-                          alert(t('common.error.invalidCron'))
+                          toast.warning(t('common.error.invalidCron'))
                         }
                       }}
                     >
@@ -210,7 +212,7 @@ const SubStoreConfig: React.FC = () => {
                           })
                           new Notification(t('common.notification.restartRequired'))
                         } else {
-                          alert(t('common.error.invalidCron'))
+                          toast.warning(t('common.error.invalidCron'))
                         }
                       }}
                     >

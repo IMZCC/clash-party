@@ -1,7 +1,13 @@
-import { writeFile } from 'fs/promises'
 import { logPath } from './dirs'
+import { appendToFileWithLimit } from './logFile'
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
+
+let appLogDisabled = false
+
+export function setAppLogDisabled(value: boolean): void {
+  appLogDisabled = value === true
+}
 
 class Logger {
   private moduleName: string
@@ -14,27 +20,31 @@ class Logger {
     return new Date().toISOString()
   }
 
-  private formatLogMessage(level: LogLevel, message: string, error?: any): string {
+  private formatLogMessage(level: LogLevel, message: string, error?: unknown): string {
     const timestamp = this.formatTimestamp()
-    const errorStr = error ? `: ${error}` : ''
+    const errorStr = error ? `: ${String(error)}` : ''
     return `[${timestamp}] [${level.toUpperCase()}] [${this.moduleName}] ${message}${errorStr}\n`
   }
 
-  private async writeToFile(level: LogLevel, message: string, error?: any): Promise<void> {
+  private async writeToFile(level: LogLevel, message: string, error?: unknown): Promise<void> {
+    if (appLogDisabled) return
     try {
       const appLogPath = logPath()
       const logMessage = this.formatLogMessage(level, message, error)
-      await writeFile(appLogPath, logMessage, { flag: 'a' })
+      await appendToFileWithLimit(appLogPath, logMessage)
     } catch (logError) {
       // 如果写入日志文件失败，仍然输出到控制台
       console.error(`[Logger] Failed to write to log file:`, logError)
-      console.error(`[Logger] Original message: [${level.toUpperCase()}] [${this.moduleName}] ${message}`, error)
+      console.error(
+        `[Logger] Original message: [${level.toUpperCase()}] [${this.moduleName}] ${message}`,
+        error
+      )
     }
   }
 
-  private logToConsole(level: LogLevel, message: string, error?: any): void {
+  private logToConsole(level: LogLevel, message: string, error?: unknown): void {
     const prefix = `[${this.moduleName}] ${message}`
-    
+
     switch (level) {
       case 'debug':
         console.debug(prefix, error || '')
@@ -51,28 +61,28 @@ class Logger {
     }
   }
 
-  async debug(message: string, error?: any): Promise<void> {
+  async debug(message: string, error?: unknown): Promise<void> {
     await this.writeToFile('debug', message, error)
     this.logToConsole('debug', message, error)
   }
 
-  async info(message: string, error?: any): Promise<void> {
+  async info(message: string, error?: unknown): Promise<void> {
     await this.writeToFile('info', message, error)
     this.logToConsole('info', message, error)
   }
 
-  async warn(message: string, error?: any): Promise<void> {
+  async warn(message: string, error?: unknown): Promise<void> {
     await this.writeToFile('warn', message, error)
     this.logToConsole('warn', message, error)
   }
 
-  async error(message: string, error?: any): Promise<void> {
+  async error(message: string, error?: unknown): Promise<void> {
     await this.writeToFile('error', message, error)
     this.logToConsole('error', message, error)
   }
 
   // 兼容原有的 logFloatingWindow 函数签名
-  async log(message: string, error?: any): Promise<void> {
+  async log(message: string, error?: unknown): Promise<void> {
     if (error) {
       await this.error(message, error)
     } else {
@@ -91,6 +101,7 @@ export const appLogger = createLogger('app')
 
 // 为了保持向后兼容性，创建各模块的日志实例（都指向同一个应用日志）
 export const floatingWindowLogger = createLogger('floating-window')
+export const mainWindowLogger = createLogger('main-window')
 export const coreLogger = createLogger('mihomo-core')
 export const apiLogger = createLogger('mihomo-api')
 export const configLogger = createLogger('config')

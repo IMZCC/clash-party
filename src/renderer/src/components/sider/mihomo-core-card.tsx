@@ -1,4 +1,5 @@
 import { Button, Card, CardBody, CardFooter, Tooltip } from '@heroui/react'
+import { toast } from '@renderer/components/base/toast'
 import { calcTraffic } from '@renderer/utils/calc'
 import { mihomoVersion, restartCore } from '@renderer/utils/ipc'
 import React, { useEffect, useState } from 'react'
@@ -36,20 +37,22 @@ const MihomoCoreCard: React.FC<Props> = (props) => {
   })
   const transform = tf ? { x: tf.x, y: tf.y, scaleX: 1, scaleY: 1 } : null
   const [mem, setMem] = useState(0)
+  const [restarting, setRestarting] = useState(false)
   const { t } = useTranslation()
 
   useEffect(() => {
     const token = PubSub.subscribe('mihomo-core-changed', () => {
       mutate()
     })
-    window.electron.ipcRenderer.on('mihomoMemory', (_e, info: IMihomoMemoryInfo) => {
+    window.electron.ipcRenderer.on('mihomoMemory', (_e, ...args) => {
+      const info = args[0] as IMihomoMemoryInfo
       setMem(info.inuse)
     })
     return (): void => {
       PubSub.unsubscribe(token)
       window.electron.ipcRenderer.removeAllListeners('mihomoMemory')
     }
-  }, [])
+  }, [mutate])
 
   if (iconOnly) {
     return (
@@ -87,7 +90,7 @@ const MihomoCoreCard: React.FC<Props> = (props) => {
           ref={setNodeRef}
           {...attributes}
           {...listeners}
-          className={`${match ? 'bg-primary' : 'hover:bg-primary/30'} ${isDragging ? `${disableAnimations ? '' : 'scale-[0.95] tap-highlight-transparent'}` : ''}`}
+          className={`${match ? 'bg-primary' : 'hover:bg-primary/30'} ${disableAnimations ? '' : `motion-reduce:transition-transform-background ${isDragging ? 'scale-[0.95] tap-highlight-transparent' : ''}`}`}
         >
           <CardBody>
             <div
@@ -108,18 +111,21 @@ const MihomoCoreCard: React.FC<Props> = (props) => {
                 variant="light"
                 color="default"
                 title={t('mihomo.restart')}
+                disabled={restarting}
                 onPress={async () => {
+                  setRestarting(true)
                   try {
                     await restartCore()
                   } catch (e) {
-                    alert(e)
+                    toast.error(String(e))
                   } finally {
                     mutate()
+                    setRestarting(false)
                   }
                 }}
               >
                 <IoMdRefresh
-                  className={`${match ? 'text-primary-foreground' : 'text-foreground'} text-[24px]`}
+                  className={`${match ? 'text-primary-foreground' : 'text-foreground'} text-[24px] ${restarting ? 'animate-spin' : ''}`}
                 />
               </Button>
             </div>
@@ -139,7 +145,7 @@ const MihomoCoreCard: React.FC<Props> = (props) => {
           ref={setNodeRef}
           {...attributes}
           {...listeners}
-          className={`${match ? 'bg-primary' : 'hover:bg-primary/30'} ${isDragging ? `${disableAnimations ? '' : 'scale-[0.95] tap-highlight-transparent'}` : ''}`}
+          className={`${match ? 'bg-primary' : 'hover:bg-primary/30'} ${disableAnimations ? '' : `motion-reduce:transition-transform-background ${isDragging ? 'scale-[0.95] tap-highlight-transparent' : ''}`}`}
         >
           <CardBody className="pb-1 pt-0 px-0">
             <div className="flex justify-between">
@@ -152,6 +158,30 @@ const MihomoCoreCard: React.FC<Props> = (props) => {
                 <LuCpu
                   color="default"
                   className={`${match ? 'text-primary-foreground' : 'text-foreground'} text-[24px] font-bold`}
+                />
+              </Button>
+              <Button
+                isIconOnly
+                size="sm"
+                variant="light"
+                color="default"
+                className="mr-2 mt-2"
+                title={t('mihomo.restart')}
+                disabled={restarting}
+                onPress={async () => {
+                  setRestarting(true)
+                  try {
+                    await restartCore()
+                  } catch (e) {
+                    toast.error(String(e))
+                  } finally {
+                    mutate()
+                    setRestarting(false)
+                  }
+                }}
+              >
+                <IoMdRefresh
+                  className={`${match ? 'text-primary-foreground' : 'text-foreground'} text-[24px] ${restarting ? 'animate-spin' : ''}`}
                 />
               </Button>
             </div>

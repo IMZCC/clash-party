@@ -7,16 +7,28 @@ import {
   DropdownItem,
   DropdownMenu,
   DropdownTrigger,
-  Input
+  Input,
+  Tooltip
 } from '@heroui/react'
 import BasePage from '@renderer/components/base/base-page'
+import { toast } from '@renderer/components/base/toast'
 import ProfileItem from '@renderer/components/profiles/profile-item'
+import PluginItem from '@renderer/components/plugins/plugin-item'
+import PluginInstallModal from '@renderer/components/plugins/plugin-install-modal'
+import EditInfoModal from '@renderer/components/profiles/edit-info-modal'
 import { useProfileConfig } from '@renderer/hooks/use-profile-config'
 import { useAppConfig } from '@renderer/hooks/use-app-config'
-import { getFilePath, readTextFile, subStoreCollections, subStoreSubs } from '@renderer/utils/ipc'
+import { usePluginConfig } from '@renderer/hooks/use-plugin-config'
+import {
+  getFilePath,
+  readTextFile,
+  subStoreCollections,
+  subStoreSubs,
+  updatePluginProfile
+} from '@renderer/utils/ipc'
 import type { KeyboardEvent } from 'react'
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { MdContentPaste } from 'react-icons/md'
+import { MdContentPaste, MdUnfoldMore, MdUnfoldLess } from 'react-icons/md'
 import {
   DndContext,
   closestCenter,
@@ -32,6 +44,7 @@ import SubStoreIcon from '@renderer/components/base/substore-icon'
 import useSWR from 'swr'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { DEFAULT_USE_SUB_STORE } from '../../../shared/appConfig'
 
 const Profiles: React.FC = () => {
   const { t } = useTranslation()
@@ -44,17 +57,30 @@ const Profiles: React.FC = () => {
     changeCurrentProfile,
     mutateProfileConfig
   } = useProfileConfig()
-  const { appConfig } = useAppConfig()
-  const { useSubStore = true, useCustomSubStore = false, customSubStoreUrl = '' } = appConfig || {}
+  const { appConfig, patchAppConfig } = useAppConfig()
+  const {
+    useSubStore = DEFAULT_USE_SUB_STORE,
+    useCustomSubStore = false,
+    customSubStoreUrl = '',
+    pluginUseProxy = false
+  } = appConfig || {}
   const { current, items = [] } = profileConfig || {}
   const navigate = useNavigate()
   const [sortedItems, setSortedItems] = useState(items)
   const [useProxy, setUseProxy] = useState(false)
+  const [authToken, setAuthToken] = useState('')
+  const [userAgent, setUserAgent] = useState('')
+  const [ageSecretKey, setAgeSecretKey] = useState('')
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [openInfoImport, setOpenInfoImport] = useState(false)
   const [subStoreImporting, setSubStoreImporting] = useState(false)
   const [importing, setImporting] = useState(false)
   const [updating, setUpdating] = useState(false)
   const [fileOver, setFileOver] = useState(false)
   const [url, setUrl] = useState('')
+  const [, setNow] = useState(new Date())
+  const { pluginConfig, mutatePluginConfig } = usePluginConfig()
+  const [showPluginImport, setShowPluginImport] = useState(false)
   const isUrlEmpty = url.trim() === ''
   const sensors = useSensors(useSensor(PointerSensor))
   const { data: subs = [], mutate: mutateSubs } = useSWR(
@@ -93,7 +119,7 @@ const Profiles: React.FC = () => {
               </div>
             </div>
           ),
-          icon: sub.icon ? <img src={sub.icon} className="h-[18px] w-[18px]" /> : null,
+          icon: sub.icon ? <img src={sub.icon} className="h-4.5 w-4.5" /> : null,
           divider: index === subs.length - 1 && Boolean(collections) && collections.length > 0
         })
       })
@@ -116,17 +142,28 @@ const Profiles: React.FC = () => {
               </div>
             </div>
           ),
-          icon: sub.icon ? <img src={sub.icon} className="h-[18px] w-[18px]" /> : null,
+          icon: sub.icon ? <img src={sub.icon} className="h-4.5 w-4.5" /> : null,
           divider: false
         })
       })
     }
     return items
-  }, [subs, collections])
+  }, [subs, collections, t])
   const handleImport = async (): Promise<void> => {
     setImporting(true)
-    await addProfileItem({ name: '', type: 'remote', url, useProxy })
+    await addProfileItem({
+      name: '',
+      type: 'remote',
+      url,
+      useProxy,
+      authToken: authToken || undefined,
+      userAgent: userAgent || undefined,
+      ageSecretKey: ageSecretKey || undefined
+    })
     setUrl('')
+    setAuthToken('')
+    setUserAgent('')
+    setAgeSecretKey('')
     setImporting(false)
   }
   const pageRef = useRef<HTMLDivElement>(null)
@@ -138,34 +175,45 @@ const Profiles: React.FC = () => {
         const newOrder = sortedItems.slice()
         const activeIndex = newOrder.findIndex((item) => item.id === active.id)
         const overIndex = newOrder.findIndex((item) => item.id === over.id)
-        newOrder.splice(activeIndex, 1)
-        newOrder.splice(overIndex, 0, items[activeIndex])
+        const [movedItem] = newOrder.splice(activeIndex, 1)
+        newOrder.splice(overIndex, 0, movedItem)
         setSortedItems(newOrder)
         await setProfileConfig({ current, items: newOrder })
       }
     }
   }
 
-  const handleInputKeyUp = useCallback(
-    (e: KeyboardEvent<HTMLInputElement>) => {
-      if (e.key !== 'Enter' || isUrlEmpty) return
-      handleImport()
-    },
-    [isUrlEmpty]
-  )
+  const handleImportRef = useRef(handleImport)
+  handleImportRef.current = handleImport
+
+  const addProfileItemRef = useRef(addProfileItem)
+  addProfileItemRef.current = addProfileItem
+
+  const tRef = useRef(t)
+  tRef.current = t
+
+  const handleInputKeyUp = useCallback((e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter' || e.currentTarget.value.trim() === '') return
+    handleImportRef.current()
+  }, [])
 
   useEffect(() => {
-    pageRef.current?.addEventListener('dragover', (e) => {
+    const element = pageRef.current
+    if (!element) return
+
+    const handleDragOver = (e: DragEvent): void => {
       e.preventDefault()
       e.stopPropagation()
       setFileOver(true)
-    })
-    pageRef.current?.addEventListener('dragleave', (e) => {
+    }
+
+    const handleDragLeave = (e: DragEvent): void => {
       e.preventDefault()
       e.stopPropagation()
       setFileOver(false)
-    })
-    pageRef.current?.addEventListener('drop', async (event) => {
+    }
+
+    const handleDrop = async (event: DragEvent): Promise<void> => {
       event.preventDefault()
       event.stopPropagation()
       if (event.dataTransfer?.files) {
@@ -174,21 +222,31 @@ const Profiles: React.FC = () => {
           try {
             const path = window.api.webUtils.getPathForFile(file)
             const content = await readTextFile(path)
-            await addProfileItem({ name: file.name, type: 'local', file: content })
+            await addProfileItemRef.current({ name: file.name, type: 'local', file: content })
           } catch (e) {
-            alert(e)
+            toast.error(String(e))
           }
         } else {
-          alert(t('profiles.error.unsupportedFileType'))
+          toast.warning(tRef.current('profiles.error.unsupportedFileType'))
         }
       }
       setFileOver(false)
-    })
-    return (): void => {
-      pageRef.current?.removeEventListener('dragover', () => {})
-      pageRef.current?.removeEventListener('dragleave', () => {})
-      pageRef.current?.removeEventListener('drop', () => {})
     }
+
+    element.addEventListener('dragover', handleDragOver)
+    element.addEventListener('dragleave', handleDragLeave)
+    element.addEventListener('drop', handleDrop)
+
+    return (): void => {
+      element.removeEventListener('dragover', handleDragOver)
+      element.removeEventListener('dragleave', handleDragLeave)
+      element.removeEventListener('drop', handleDrop)
+    }
+  }, [])
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 30000)
+    return () => clearInterval(timer)
   }, [])
 
   useEffect(() => {
@@ -210,12 +268,15 @@ const Profiles: React.FC = () => {
             setUpdating(true)
             for (const item of items) {
               if (item.id === current) continue
-              if (item.type !== 'remote') continue
-              await addProfileItem(item)
+              if (item.type === 'remote') await addProfileItem(item)
+              else if (item.type === 'plugin' && item.pluginId)
+                await updatePluginProfile(item.pluginId, true)
             }
             const currentItem = items.find((item) => item.id === current)
             if (currentItem && currentItem.type === 'remote') {
               await addProfileItem(currentItem)
+            } else if (currentItem?.type === 'plugin' && currentItem.pluginId) {
+              await updatePluginProfile(currentItem.pluginId, true)
             }
             setUpdating(false)
           }}
@@ -224,160 +285,262 @@ const Profiles: React.FC = () => {
         </Button>
       }
     >
+      {openInfoImport && (
+        <EditInfoModal
+          mode="import"
+          item={{
+            id: '',
+            name: '',
+            type: 'remote',
+            url: '',
+            override: [],
+            useProxy
+          }}
+          addProfileItem={addProfileItem}
+          onClose={() => setOpenInfoImport(false)}
+        />
+      )}
       <div className="sticky profiles-sticky top-0 z-40 bg-background">
-        <div className="flex p-2">
-          <Input
-            size="sm"
-            placeholder={t('profiles.input.placeholder')}
-            value={url}
-            onValueChange={setUrl}
-            onKeyUp={handleInputKeyUp}
-            endContent={
-              <>
-                <Button
-                  size="md"
-                  isIconOnly
-                  variant="light"
-                  onPress={() => {
-                    navigator.clipboard.readText().then((text) => {
-                      setUrl(text)
-                    })
-                  }}
-                  className="mr-2"
-                >
-                  <MdContentPaste className="text-lg" />
-                </Button>
-                <Checkbox
-                  className="whitespace-nowrap"
-                  checked={useProxy}
-                  onValueChange={setUseProxy}
-                >
-                  {t('profiles.useProxy')}
-                </Checkbox>
-              </>
-            }
-          />
+        <div className="flex flex-col gap-2 p-2">
+          <div className="flex gap-2">
+            <Input
+              size="sm"
+              placeholder={t('profiles.input.placeholder')}
+              value={url}
+              onValueChange={setUrl}
+              onKeyUp={handleInputKeyUp}
+              className="flex-1"
+              endContent={
+                <>
+                  <Button
+                    size="md"
+                    isIconOnly
+                    variant="light"
+                    onPress={() => {
+                      navigator.clipboard.readText().then((text) => {
+                        setUrl(text)
+                      })
+                    }}
+                    className="mr-2"
+                  >
+                    <MdContentPaste className="text-lg" />
+                  </Button>
+                  <Checkbox
+                    className="whitespace-nowrap"
+                    checked={useProxy}
+                    onValueChange={setUseProxy}
+                  >
+                    {t('profiles.useProxy')}
+                  </Checkbox>
+                </>
+              }
+            />
 
-          <Button
-            size="sm"
-            color="primary"
-            className="ml-2"
-            isDisabled={isUrlEmpty}
-            isLoading={importing}
-            onPress={handleImport}
-          >
-            {t('profiles.import')}
-          </Button>
-          {useSubStore && (
-            <Dropdown
-              onOpenChange={() => {
-                mutateSubs()
-                mutateCollections()
-              }}
+            <Tooltip content={t('profiles.editInfo.authToken')} placement="bottom">
+              <Button
+                size="sm"
+                variant={showAdvanced ? 'solid' : 'light'}
+                isIconOnly
+                onPress={() => setShowAdvanced(!showAdvanced)}
+              >
+                {showAdvanced ? (
+                  <MdUnfoldLess className="text-lg" />
+                ) : (
+                  <MdUnfoldMore className="text-lg" />
+                )}
+              </Button>
+            </Tooltip>
+            <Button
+              size="sm"
+              color="primary"
+              isDisabled={isUrlEmpty}
+              isLoading={importing}
+              onPress={handleImport}
             >
-              <DropdownTrigger>
-                <Button
-                  isLoading={subStoreImporting}
-                  title="Sub-Store"
-                  className="ml-2 substore-import"
-                  size="sm"
-                  isIconOnly
-                  color="primary"
+              {t('profiles.import')}
+            </Button>
+            {useSubStore && (
+              <Dropdown
+                onOpenChange={() => {
+                  mutateSubs()
+                  mutateCollections()
+                }}
+              >
+                <DropdownTrigger>
+                  <Button
+                    isLoading={subStoreImporting}
+                    title="Sub-Store"
+                    className="substore-import"
+                    size="sm"
+                    isIconOnly
+                    color="primary"
+                  >
+                    <SubStoreIcon className="text-lg" />
+                  </Button>
+                </DropdownTrigger>
+                <DropdownMenu
+                  className="max-h-[calc(100vh-200px)] overflow-y-auto"
+                  onAction={async (key) => {
+                    if (key === 'open-substore') {
+                      navigate('/substore')
+                    } else if (key.toString().startsWith('sub-')) {
+                      setSubStoreImporting(true)
+                      try {
+                        const sub = subs.find(
+                          (sub) => sub.name === key.toString().replace('sub-', '')
+                        )
+                        await addProfileItem({
+                          name: sub?.displayName || sub?.name || '',
+                          substore: !useCustomSubStore,
+                          type: 'remote',
+                          url: useCustomSubStore
+                            ? `${customSubStoreUrl}/download/${key.toString().replace('sub-', '')}?target=ClashMeta`
+                            : `/download/${key.toString().replace('sub-', '')}`,
+                          useProxy
+                        })
+                      } catch (e) {
+                        toast.error(String(e))
+                      } finally {
+                        setSubStoreImporting(false)
+                      }
+                    } else if (key.toString().startsWith('collection-')) {
+                      setSubStoreImporting(true)
+                      try {
+                        const collection = collections.find(
+                          (collection) =>
+                            collection.name === key.toString().replace('collection-', '')
+                        )
+                        await addProfileItem({
+                          name: collection?.displayName || collection?.name || '',
+                          type: 'remote',
+                          substore: !useCustomSubStore,
+                          url: useCustomSubStore
+                            ? `${customSubStoreUrl}/download/collection/${key.toString().replace('collection-', '')}?target=ClashMeta`
+                            : `/download/collection/${key.toString().replace('collection-', '')}`,
+                          useProxy
+                        })
+                      } catch (e) {
+                        toast.error(String(e))
+                      } finally {
+                        setSubStoreImporting(false)
+                      }
+                    }
+                  }}
                 >
-                  <SubStoreIcon className="text-lg" />
+                  {subStoreMenuItems.map((item) => (
+                    <DropdownItem
+                      startContent={item?.icon}
+                      key={item.key}
+                      showDivider={item.divider}
+                    >
+                      {item.children}
+                    </DropdownItem>
+                  ))}
+                </DropdownMenu>
+              </Dropdown>
+            )}
+            <Dropdown>
+              <DropdownTrigger>
+                <Button className="new-profile" size="sm" isIconOnly color="primary">
+                  <FaPlus />
                 </Button>
               </DropdownTrigger>
               <DropdownMenu
-                className="max-h-[calc(100vh-200px)] overflow-y-auto"
                 onAction={async (key) => {
-                  if (key === 'open-substore') {
-                    navigate('/substore')
-                  } else if (key.toString().startsWith('sub-')) {
-                    setSubStoreImporting(true)
+                  if (key === 'open') {
                     try {
-                      const sub = subs.find(
-                        (sub) => sub.name === key.toString().replace('sub-', '')
-                      )
-                      await addProfileItem({
-                        name: sub?.displayName || sub?.name || '',
-                        substore: !useCustomSubStore,
-                        type: 'remote',
-                        url: useCustomSubStore
-                          ? `${customSubStoreUrl}/download/${key.toString().replace('sub-', '')}?target=ClashMeta`
-                          : `/download/${key.toString().replace('sub-', '')}`,
-                        useProxy
-                      })
+                      const files = await getFilePath(['yml', 'yaml'])
+                      if (files?.length) {
+                        const content = await readTextFile(files[0])
+                        const fileName = files[0].split('/').pop()?.split('\\').pop()
+                        await addProfileItem({ name: fileName, type: 'local', file: content })
+                      }
                     } catch (e) {
-                      alert(e)
-                    } finally {
-                      setSubStoreImporting(false)
+                      toast.error(String(e))
                     }
-                  } else if (key.toString().startsWith('collection-')) {
-                    setSubStoreImporting(true)
-                    try {
-                      const collection = collections.find(
-                        (collection) =>
-                          collection.name === key.toString().replace('collection-', '')
-                      )
-                      await addProfileItem({
-                        name: collection?.displayName || collection?.name || '',
-                        type: 'remote',
-                        substore: !useCustomSubStore,
-                        url: useCustomSubStore
-                          ? `${customSubStoreUrl}/download/collection/${key.toString().replace('collection-', '')}?target=ClashMeta`
-                          : `/download/collection/${key.toString().replace('collection-', '')}`,
-                        useProxy
-                      })
-                    } catch (e) {
-                      alert(e)
-                    } finally {
-                      setSubStoreImporting(false)
-                    }
+                  } else if (key === 'new') {
+                    await addProfileItem({
+                      name: t('profiles.newProfile'),
+                      type: 'local',
+                      file: 'proxies: []\nproxy-groups: []\nrules: []'
+                    })
+                  } else if (key === 'import') {
+                    setOpenInfoImport(true)
                   }
                 }}
               >
-                {subStoreMenuItems.map((item) => (
-                  <DropdownItem startContent={item?.icon} key={item.key} showDivider={item.divider}>
-                    {item.children}
-                  </DropdownItem>
-                ))}
+                <DropdownItem key="import">{t('profiles.import')}</DropdownItem>
+                <DropdownItem key="open">{t('profiles.open')}</DropdownItem>
+                <DropdownItem key="new">{t('profiles.new')}</DropdownItem>
               </DropdownMenu>
             </Dropdown>
+          </div>
+          {showAdvanced && (
+            <div className="flex gap-2">
+              <Input
+                size="sm"
+                type="password"
+                placeholder={t('profiles.editInfo.authTokenPlaceholder')}
+                value={authToken}
+                onValueChange={setAuthToken}
+                onKeyUp={handleInputKeyUp}
+                className="flex-1"
+              />
+              <Input
+                size="sm"
+                placeholder={t('profiles.editInfo.userAgentPlaceholder')}
+                value={userAgent}
+                onValueChange={setUserAgent}
+                onKeyUp={handleInputKeyUp}
+                className="flex-1"
+              />
+              <Input
+                size="sm"
+                type="password"
+                placeholder={t('profiles.editInfo.ageSecretKeyPlaceholder')}
+                value={ageSecretKey}
+                onValueChange={setAgeSecretKey}
+                onKeyUp={handleInputKeyUp}
+                className="flex-1"
+              />
+            </div>
           )}
-          <Dropdown>
-            <DropdownTrigger>
-              <Button className="ml-2 new-profile" size="sm" isIconOnly color="primary">
-                <FaPlus />
-              </Button>
-            </DropdownTrigger>
-            <DropdownMenu
-              onAction={async (key) => {
-                if (key === 'open') {
-                  try {
-                    const files = await getFilePath(['yml', 'yaml'])
-                    if (files?.length) {
-                      const content = await readTextFile(files[0])
-                      const fileName = files[0].split('/').pop()?.split('\\').pop()
-                      await addProfileItem({ name: fileName, type: 'local', file: content })
-                    }
-                  } catch (e) {
-                    alert(e)
-                  }
-                } else if (key === 'new') {
-                  await addProfileItem({
-                    name: t('profiles.newProfile'),
-                    type: 'local',
-                    file: 'proxies: []\nproxy-groups: []\nrules: []'
-                  })
-                }
-              }}
-            >
-              <DropdownItem key="open">{t('profiles.open')}</DropdownItem>
-              <DropdownItem key="new">{t('profiles.new')}</DropdownItem>
-            </DropdownMenu>
-          </Dropdown>
         </div>
         <Divider />
+      </div>
+      <div className="px-2">
+        <div className="flex items-center justify-between mt-2 mb-2">
+          <span className="font-bold">{t('plugins.title')}</span>
+          <div className="flex items-center gap-3">
+            <Tooltip content={t('plugins.useProxyWarning')} placement="bottom">
+              <Checkbox
+                size="sm"
+                isSelected={pluginUseProxy}
+                onValueChange={(v) => patchAppConfig({ pluginUseProxy: v })}
+              >
+                {t('plugins.useProxy')}
+              </Checkbox>
+            </Tooltip>
+            <Button size="sm" color="primary" onPress={() => setShowPluginImport(true)}>
+              {t('plugins.import')}
+            </Button>
+          </div>
+        </div>
+        {(pluginConfig?.items?.length ?? 0) > 0 && (
+          <div className="grid grid-cols-1 gap-2 mb-3">
+            {pluginConfig?.items?.map((p) => (
+              <PluginItem key={p.id} item={p} onChanged={mutatePluginConfig} />
+            ))}
+          </div>
+        )}
+        {showPluginImport && (
+          <PluginInstallModal
+            onClose={() => {
+              setShowPluginImport(false)
+              mutatePluginConfig()
+            }}
+          />
+        )}
       </div>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <div

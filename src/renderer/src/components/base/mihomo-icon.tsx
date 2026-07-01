@@ -1,10 +1,10 @@
 import React from 'react'
-import { GenIcon } from 'react-icons'
+import { GenIcon, IconBaseProps } from 'react-icons'
 
-function MihomoIcon(props: any): React.JSX.Element {
+function MihomoIcon(props: IconBaseProps): React.JSX.Element {
   return GenIcon({
     tag: 'svg',
-    attr: { viewBox: '0 0 58 61.53' },
+    attr: { viewBox: '0 0 57 79' },
     child: [
       {
         tag: 'path',

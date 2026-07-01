@@ -1,7 +1,7 @@
-import { is } from '@electron-toolkit/utils'
 import { existsSync, mkdirSync } from 'fs'
-import { app } from 'electron'
 import path from 'path'
+import { is } from '@electron-toolkit/utils'
+import { app } from 'electron'
 
 export const homeDir = app.getPath('home')
 
@@ -9,22 +9,31 @@ export function isPortable(): boolean {
   return existsSync(path.join(exeDir(), 'PORTABLE'))
 }
 
+function portableDataDir(): string {
+  return path.join(exeDir(), 'data')
+}
+
+export function configurePortableUserData(): void {
+  if (isPortable()) {
+    app.setPath('userData', portableDataDir())
+  }
+}
+
 export function dataDir(): string {
   if (isPortable()) {
-    return path.join(exeDir(), 'data')
+    return portableDataDir()
   } else {
     return app.getPath('userData')
   }
 }
 
 export function taskDir(): string {
-  const userDataDir = app.getPath('userData')
-  // 确保 userData 目录存在
-  if (!existsSync(userDataDir)) {
-    mkdirSync(userDataDir, { recursive: true })
+  const baseDir = dataDir()
+  if (!existsSync(baseDir)) {
+    mkdirSync(baseDir, { recursive: true })
   }
-  
-  const dir = path.join(userDataDir, 'tasks')
+
+  const dir = path.join(baseDir, 'tasks')
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true })
   }
@@ -96,6 +105,18 @@ export function profilePath(id: string): string {
   return path.join(profilesDir(), `${id}.yaml`)
 }
 
+export function pluginConfigPath(): string {
+  return path.join(dataDir(), 'plugin.yaml')
+}
+
+export function pluginVaultDir(): string {
+  return path.join(dataDir(), 'plugin-vault')
+}
+
+export function pluginVaultPath(id: string): string {
+  return path.join(pluginVaultDir(), `${id}.bin`)
+}
+
 export function overrideDir(): string {
   return path.join(dataDir(), 'override')
 }
@@ -157,4 +178,12 @@ export function coreLogPath(): string {
   const day = String(date.getDate()).padStart(2, '0')
   const name = `core-${year}-${month}-${day}`
   return path.join(logDir(), `${name}.log`)
+}
+
+export function rulesDir(): string {
+  return path.join(dataDir(), 'rules')
+}
+
+export function rulePath(id: string): string {
+  return path.join(rulesDir(), `${id}.yaml`)
 }

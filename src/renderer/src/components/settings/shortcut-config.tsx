@@ -1,11 +1,12 @@
 import { Button, Input } from '@heroui/react'
-import SettingCard from '../base/base-setting-card'
-import SettingItem from '../base/base-setting-item'
+import { toast } from '@renderer/components/base/toast'
 import { useAppConfig } from '@renderer/hooks/use-app-config'
 import React, { KeyboardEvent, useState } from 'react'
 import { platform } from '@renderer/utils/init'
 import { registerShortcut } from '@renderer/utils/ipc'
 import { useTranslation } from 'react-i18next'
+import SettingItem from '../base/base-setting-item'
+import SettingCard from '../base/base-setting-card'
 
 const keyMap = {
   Backquote: '`',
@@ -52,7 +53,8 @@ const ShortcutConfig: React.FC = () => {
     globalModeShortcut = '',
     directModeShortcut = '',
     quitWithoutCoreShortcut = '',
-    restartAppShortcut = ''
+    restartAppShortcut = '',
+    copyEnvShortcut = ''
   } = appConfig || {}
 
   return (
@@ -129,12 +131,21 @@ const ShortcutConfig: React.FC = () => {
           />
         </div>
       </SettingItem>
-      <SettingItem title={t('shortcuts.restartApp')}>
+      <SettingItem title={t('shortcuts.restartApp')} divider>
         <div className="flex justify-end w-[60%]">
           <ShortcutInput
             value={restartAppShortcut}
             patchAppConfig={patchAppConfig}
             action="restartAppShortcut"
+          />
+        </div>
+      </SettingItem>
+      <SettingItem title={t('shortcuts.copyEnv')}>
+        <div className="flex justify-end w-[60%]">
+          <ShortcutInput
+            value={copyEnvShortcut}
+            patchAppConfig={patchAppConfig}
+            action="copyEnvShortcut"
           />
         </div>
       </SettingItem>
@@ -213,10 +224,10 @@ const ShortcutInput: React.FC<{
                 await patchAppConfig({ [action]: inputValue })
                 window.electron.ipcRenderer.send('updateTrayMenu')
               } else {
-                alert(t('common.error.shortcutRegistrationFailed'))
+                toast.error(t('common.error.shortcutRegistrationFailed'))
               }
             } catch (e) {
-              alert(t('common.error.shortcutRegistrationFailedWithError', { error: e }))
+              toast.error(t('common.error.shortcutRegistrationFailedWithError', { error: e }))
             }
           }}
         >

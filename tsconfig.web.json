@@ -8,13 +8,14 @@
     "src/renderer/src/**/*.tsx",
     "src/preload/*.d.ts"
   ],
+  "exclude": ["**/*.test.ts", "node_modules"],
   "compilerOptions": {
     "composite": true,
     "jsx": "react-jsx",
-    "baseUrl": ".",
+    "moduleResolution": "bundler",
     "paths": {
       "@renderer/*": [
-        "src/renderer/src/*"
+        "./src/renderer/src/*"
       ]
     }
   }

@@ -1,14 +1,21 @@
 import { Button, Input, Switch, Tab, Tabs } from '@heroui/react'
 import BasePage from '@renderer/components/base/base-page'
+import { showErrorSync } from '@renderer/utils/error-display'
 import SettingCard from '@renderer/components/base/base-setting-card'
 import SettingItem from '@renderer/components/base/base-setting-item'
 import { useControledMihomoConfig } from '@renderer/hooks/use-controled-mihomo-config'
-import { grantTunPermissions, restartCore, setupFirewall } from '@renderer/utils/ipc'
+import {
+  grantTunPermissions,
+  mihomoHotReloadConfig,
+  restartCore,
+  setupFirewall
+} from '@renderer/utils/ipc'
 import { platform } from '@renderer/utils/init'
 import React, { Key, useState } from 'react'
 import { useAppConfig } from '@renderer/hooks/use-app-config'
 import { MdDeleteForever } from 'react-icons/md'
 import { useTranslation } from 'react-i18next'
+import { DEFAULT_MIHOMO_TUN_CONFIG, getDefaultMihomoTunDevice } from '../../../shared/appConfig'
 
 const Tun: React.FC = () => {
   const { t } = useTranslation()
@@ -18,15 +25,19 @@ const Tun: React.FC = () => {
   const { tun } = controledMihomoConfig || {}
   const [loading, setLoading] = useState(false)
   const {
-    device = platform === 'darwin' ? 'utun1500' : 'Mihomo',
-    stack = 'mixed',
-    'auto-route': autoRoute = true,
-    'auto-redirect': autoRedirect = false,
-    'auto-detect-interface': autoDetectInterface = true,
-    'dns-hijack': dnsHijack = ['any:53'],
-    'route-exclude-address': routeExcludeAddress = [],
+    device = getDefaultMihomoTunDevice(platform),
+    stack = DEFAULT_MIHOMO_TUN_CONFIG.stack,
+    'auto-route': autoRoute = DEFAULT_MIHOMO_TUN_CONFIG['auto-route'],
+    'auto-redirect': autoRedirect = DEFAULT_MIHOMO_TUN_CONFIG['auto-redirect'],
+    'auto-detect-interface': autoDetectInterface = DEFAULT_MIHOMO_TUN_CONFIG[
+      'auto-detect-interface'
+    ],
+    'dns-hijack': dnsHijack = DEFAULT_MIHOMO_TUN_CONFIG['dns-hijack'],
+    'route-exclude-address': routeExcludeAddress = DEFAULT_MIHOMO_TUN_CONFIG[
+      'route-exclude-address'
+    ],
     'strict-route': strictRoute = false,
-    mtu = 1500
+    mtu = DEFAULT_MIHOMO_TUN_CONFIG.mtu
   } = tun || {}
   const [changed, setChanged] = useState(false)
   const [values, originSetValues] = useState({
@@ -62,9 +73,14 @@ const Tun: React.FC = () => {
   }
 
   const onSave = async (patch: Partial<IMihomoConfig>): Promise<void> => {
-    await patchControledMihomoConfig(patch)
-    await restartCore()
-    setChanged(false)
+    try {
+      await patchControledMihomoConfig(patch)
+      await mihomoHotReloadConfig()
+    } catch (e) {
+      showErrorSync(e, t('common.error.configSaveFailed'))
+    } finally {
+      setChanged(false)
+    }
   }
 
   return (
@@ -112,7 +128,7 @@ const Tun: React.FC = () => {
                     new Notification(t('tun.notifications.firewallResetSuccess'))
                     await restartCore()
                   } catch (e) {
-                    alert(e)
+                    showErrorSync(e, t('common.error.firewallSetupFailed'))
                   } finally {
                     setLoading(false)
                   }
@@ -133,7 +149,7 @@ const Tun: React.FC = () => {
                     new Notification(t('tun.notifications.coreAuthSuccess'))
                     await restartCore()
                   } catch (e) {
-                    alert(e)
+                    showErrorSync(e, t('common.error.coreAuthFailed'))
                   }
                 }}
               >
@@ -168,9 +184,9 @@ const Tun: React.FC = () => {
           <SettingItem title={t('tun.device.title')} divider>
             <Input
               size="sm"
-              className="w-[100px]"
+              className="w-25"
               value={values.device}
-              placeholder={platform === 'darwin' ? 'utun1500' : 'Mihomo'}
+              placeholder={getDefaultMihomoTunDevice(platform)}
               onValueChange={(v) => {
                 setValues({ ...values, device: v })
               }}
@@ -219,10 +235,11 @@ const Tun: React.FC = () => {
             <Input
               size="sm"
               type="number"
-              className="w-[100px]"
+              className="w-25"
               value={values.mtu.toString()}
               onValueChange={(v) => {
-                setValues({ ...values, mtu: parseInt(v) })
+                const num = parseInt(v)
+                setValues({ ...values, mtu: isNaN(num) ? DEFAULT_MIHOMO_TUN_CONFIG.mtu : num })
               }}
             />
           </SettingItem>

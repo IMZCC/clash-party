@@ -6,7 +6,6 @@ import { Virtuoso, VirtuosoHandle } from 'react-virtuoso'
 import { IoLocationSharp } from 'react-icons/io5'
 import { CgTrash } from 'react-icons/cg'
 import { useTranslation } from 'react-i18next'
-
 import { includesIgnoreCase } from '@renderer/utils/includes'
 
 const LOGS_FILTER_KEY = 'logs-filter'
@@ -26,7 +25,8 @@ const cachedLogs: {
   }
 }
 
-window.electron.ipcRenderer.on('mihomoLogs', (_e, log: IMihomoLogInfo) => {
+window.electron.ipcRenderer.on('mihomoLogs', (_e, ...args) => {
+  const log = args[0] as IMihomoLogInfo
   log.time = new Date().toLocaleString()
   cachedLogs.log.push(log)
   if (cachedLogs.log.length >= 500) {
@@ -44,9 +44,9 @@ const Logs: React.FC = () => {
     return localStorage.getItem(LOGS_FILTER_KEY) || ''
   })
   const [trace, setTrace] = useState(true)
-  const containerRef = useRef<HTMLDivElement>(null)
 
   const virtuosoRef = useRef<VirtuosoHandle>(null)
+
   const filteredLogs = useMemo(() => {
     if (filter === '') return logs
     return logs.filter((log) => {
@@ -57,32 +57,6 @@ const Logs: React.FC = () => {
   useEffect(() => {
     localStorage.setItem(LOGS_FILTER_KEY, filter)
   }, [filter])
-
-  useEffect((): void | (() => void) => {
-    if (!trace) {
-      const container = containerRef.current
-      if (container) {
-        const handleScroll = () => {
-          setTrace(true)
-          container.removeEventListener('wheel', handleScroll)
-        }
-        container.addEventListener('wheel', handleScroll)
-        return () => {
-          container.removeEventListener('wheel', handleScroll)
-        }
-      }
-    }
-  }, [trace])
-
-  useEffect(() => {
-    if (!trace) return
-    virtuosoRef.current?.scrollToIndex({
-      index: filteredLogs.length - 1,
-      behavior: 'smooth',
-      align: 'end',
-      offset: 0
-    })
-  }, [filteredLogs, trace])
 
   useEffect(() => {
     const old = cachedLogs.trigger
@@ -113,9 +87,7 @@ const Logs: React.FC = () => {
             variant={trace ? 'solid' : 'bordered'}
             title={t('logs.autoScroll')}
             onPress={() => {
-              if (trace) {
-                setTrace(false)
-              }
+              setTrace((prev) => !prev)
             }}
           >
             <IoLocationSharp className="text-lg" />
@@ -136,21 +108,15 @@ const Logs: React.FC = () => {
         </div>
         <Divider />
       </div>
-      <div className="h-[calc(100vh-100px)] mt-px" ref={containerRef}>
+      <div className="h-[calc(100vh-100px)] mt-px">
         <Virtuoso
           ref={virtuosoRef}
           data={filteredLogs}
-          itemContent={(i, log) => {
-            return (
-              <LogItem
-                index={i}
-                key={log.payload + i}
-                time={log.time}
-                type={log.type}
-                payload={log.payload}
-              />
-            )
-          }}
+          initialTopMostItemIndex={filteredLogs.length - 1}
+          followOutput={trace}
+          itemContent={(i, log) => (
+            <LogItem index={i} time={log.time} type={log.type} payload={log.payload} />
+          )}
         />
       </div>
     </BasePage>

@@ -8,16 +8,17 @@ import {
   DropdownMenu,
   DropdownTrigger
 } from '@heroui/react'
+import { toast } from '@renderer/components/base/toast'
 import { IoMdMore, IoMdRefresh } from 'react-icons/io'
 import dayjs from '@renderer/utils/dayjs'
 import React, { Key, useMemo, useState } from 'react'
-import EditFileModal from './edit-file-modal'
-import EditInfoModal from './edit-info-modal'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import ExecLogModal from './exec-log-modal'
-import { openFile, restartCore } from '@renderer/utils/ipc'
+import { openFile, mihomoHotReloadConfig } from '@renderer/utils/ipc'
 import { useTranslation } from 'react-i18next'
+import ExecLogModal from './exec-log-modal'
+import EditInfoModal from './edit-info-modal'
+import EditFileModal from './edit-file-modal'
 
 interface Props {
   info: IOverrideItem
@@ -124,8 +125,6 @@ const OverrideItem: React.FC<Props> = (props) => {
     }
   }
 
-
-
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
@@ -169,12 +168,7 @@ const OverrideItem: React.FC<Props> = (props) => {
           setOpenFileEditor(true)
         }}
       >
-        <div
-          ref={setNodeRef}
-          {...attributes}
-          {...listeners}
-          className="h-full w-full"
-        >
+        <div ref={setNodeRef} {...attributes} {...listeners} className="h-full w-full">
           <CardBody>
             <div className="flex justify-between h-[32px]">
               <h3
@@ -195,9 +189,9 @@ const OverrideItem: React.FC<Props> = (props) => {
                       setUpdating(true)
                       try {
                         await addOverrideItem(info)
-                        await restartCore()
+                        await mihomoHotReloadConfig()
                       } catch (e) {
-                        alert(e)
+                        toast.error(String(e))
                       } finally {
                         setUpdating(false)
                       }
@@ -210,10 +204,7 @@ const OverrideItem: React.FC<Props> = (props) => {
                   </Button>
                 )}
 
-                <Dropdown
-                  isOpen={dropdownOpen}
-                  onOpenChange={setDropdownOpen}
-                >
+                <Dropdown isOpen={dropdownOpen} onOpenChange={setDropdownOpen}>
                   <DropdownTrigger>
                     <Button isIconOnly size="sm" variant="light" color="default">
                       <IoMdMore color="default" className={`text-[24px]`} />
