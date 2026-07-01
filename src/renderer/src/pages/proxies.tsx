@@ -195,6 +195,87 @@ const Proxies: React.FC = () => {
     return await mihomoProxyDelay(proxy, url)
   }, [])
 
+  // 组测速时逐节点写回会造成 O(N²) 分配与 N 次 allProxies 重算
+  const pendingDelayResults = useRef<Map<string, Map<string, { time: string; delay: number }>>>(
+    new Map()
+  )
+  const pendingDelayDone = useRef<Map<number, Set<string>>>(new Map())
+  const flushDelayTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const flushDelayResults = useCallback((): void => {
+    if (flushDelayTimer.current) {
+      clearTimeout(flushDelayTimer.current)
+      flushDelayTimer.current = null
+    }
+    const results = pendingDelayResults.current
+    const done = pendingDelayDone.current
+    if (results.size === 0 && done.size === 0) return
+
+    // 把 ref 换成新的空容器，updater 只读这份脱离 ref 的快照
+    pendingDelayResults.current = new Map()
+    pendingDelayDone.current = new Map()
+
+    if (results.size > 0) {
+      mutate(
+        (current) => {
+          if (!current) return current
+          let changed = false
+          const next = current.map((group) => {
+            const groupResults = results.get(group.name)
+            if (!groupResults || groupResults.size === 0) return group
+            let groupChanged = false
+            const all = group.all.map((p) => {
+              const entry = groupResults.get(p.name)
+              if (!entry) return p
+              groupChanged = true
+              return { ...p, history: [...p.history, entry] }
+            })
+            if (!groupChanged) return group
+            changed = true
+            return { ...group, all }
+          })
+          return changed ? next : current
+        },
+        { revalidate: false }
+      )
+    }
+
+    if (done.size > 0) {
+      setDelaying((prev) => {
+        let changed = false
+        const next = [...prev]
+        done.forEach((names, idx) => {
+          const set = next[idx]
+          if (!set) return
+          const newSet = new Set(set)
+          let localChanged = false
+          names.forEach((name) => {
+            if (newSet.delete(name)) localChanged = true
+          })
+          if (localChanged) {
+            next[idx] = newSet
+            changed = true
+          }
+        })
+        return changed ? next : prev
+      })
+    }
+  }, [mutate])
+
+  const scheduleFlushDelayResults = useCallback((): void => {
+    if (flushDelayTimer.current) return
+    flushDelayTimer.current = setTimeout(flushDelayResults, 200)
+  }, [flushDelayResults])
+
+  useEffect(() => {
+    return (): void => {
+      if (flushDelayTimer.current) {
+        clearTimeout(flushDelayTimer.current)
+        flushDelayTimer.current = null
+      }
+    }
+  }, [])
+
   const onGroupDelay = useCallback(
     async (index: number): Promise<void> => {
       if (allProxies[index].length === 0) {
@@ -222,39 +303,25 @@ const Proxies: React.FC = () => {
           } catch {
             // ignore
           }
-          mutate(
-            (current) => {
-              if (!current) return current
-              const group = current[index]
-              if (!group) return current
-              const next = [...current]
-              next[index] = {
-                ...group,
-                all: group.all.map((p) =>
-                  p.name === proxy.name
-                    ? {
-                        ...p,
-                        history: [
-                          ...p.history,
-                          { time: new Date().toISOString(), delay: res?.delay ?? 0 }
-                        ]
-                      }
-                    : p
-                )
-              }
-              return next
-            },
-            { revalidate: false }
-          )
-          setDelaying((prev) => {
-            const set = prev[index]
-            if (!set || !set.has(proxy.name)) return prev
-            const newSet = new Set(set)
-            newSet.delete(proxy.name)
-            const next = [...prev]
-            next[index] = newSet
-            return next
+          const groupName = groups[index].name
+          let groupResults = pendingDelayResults.current.get(groupName)
+          if (!groupResults) {
+            groupResults = new Map()
+            pendingDelayResults.current.set(groupName, groupResults)
+          }
+          groupResults.set(proxy.name, {
+            time: new Date().toISOString(),
+            delay: res?.delay ?? 0
           })
+
+          let groupDone = pendingDelayDone.current.get(index)
+          if (!groupDone) {
+            groupDone = new Set()
+            pendingDelayDone.current.set(index, groupDone)
+          }
+          groupDone.add(proxy.name)
+
+          scheduleFlushDelayResults()
         })
         result.push(promise)
         const running = promise.then(() => {
@@ -266,8 +333,16 @@ const Proxies: React.FC = () => {
         }
       }
       await Promise.all(result)
+      flushDelayResults()
     },
-    [allProxies, groups, delayTestConcurrency, mutate, setIsOpen]
+    [
+      allProxies,
+      groups,
+      delayTestConcurrency,
+      scheduleFlushDelayResults,
+      flushDelayResults,
+      setIsOpen
+    ]
   )
 
   const calcCols = useCallback((): number => {

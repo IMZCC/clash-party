@@ -44,7 +44,29 @@ import { useControledMihomoConfig } from '@renderer/hooks/use-controled-mihomo-c
 
 let cachedConnections: IMihomoConnectionDetail[] = []
 const MAX_QUEUE_SIZE = 100
+// 按进程路径累积的内存缓存封顶，避免长时间运行无界增长
+const MAX_ICON_CACHE_SIZE = 256
+const MAX_APP_NAME_CACHE_SIZE = 512
 const CONNECTIONS_FILTER_KEY = 'connections-filter'
+
+function putCappedRecord<T>(
+  prev: Record<string, T>,
+  key: string,
+  value: T,
+  max: number
+): Record<string, T> {
+  if (max <= 0) return {}
+  const next: Record<string, T> = { ...prev, [key]: value }
+  const keys = Object.keys(next)
+  const overflow = keys.length - max
+  for (let i = 0, removed = 0; removed < overflow && i < keys.length; i++) {
+    if (keys[i] !== key) {
+      delete next[keys[i]]
+      removed++
+    }
+  }
+  return next
+}
 
 const Connections: React.FC = () => {
   const { t } = useTranslation()
@@ -229,7 +251,7 @@ const Connections: React.FC = () => {
       try {
         const appName = await getAppName(path)
         if (appName) {
-          setAppNameCache((prev) => ({ ...prev, [path]: appName }))
+          setAppNameCache((prev) => putCappedRecord(prev, path, appName, MAX_APP_NAME_CACHE_SIZE))
         }
       } catch {
         // ignore
@@ -270,7 +292,7 @@ const Connections: React.FC = () => {
 
         saveIconToCache(path, processedDataURL)
 
-        setIconMap((prev) => ({ ...prev, [path]: processedDataURL }))
+        setIconMap((prev) => putCappedRecord(prev, path, processedDataURL, MAX_ICON_CACHE_SIZE))
 
         const firstConnection = filteredConnectionsRef.current[0]
         if (firstConnection?.metadata.processPath === path) {
@@ -327,7 +349,7 @@ const Connections: React.FC = () => {
 
       const fromCache = getIconFromCache(path)
       if (fromCache) {
-        setIconMap((prev) => ({ ...prev, [path]: fromCache }))
+        setIconMap((prev) => putCappedRecord(prev, path, fromCache, MAX_ICON_CACHE_SIZE))
         if (isVisible && filteredConnections[0]?.metadata.processPath === path) {
           setFirstItemRefreshTrigger((prev) => prev + 1)
         }
